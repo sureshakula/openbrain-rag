@@ -1,0 +1,116 @@
+VOZIQ Internal Knowledge RAG System
+Requirements Document v0.3
+
+Purpose
+VOZIQ has institutional knowledge spread across a local folder, SharePoint, email, and direct uploads that is not captured in BookStack. This document defines requirements for a system that ingests that content, makes it queryable via semantic search, and uses it to generate documentation that lands in BookStack via a human-reviewed approval workflow. The goal is to turn scattered, unstructured company knowledge into maintained, usable documentation without requiring someone to write everything from scratch.
+
+System Overview
+Five components working together:
+Ingestion Service polls three content sources on a schedule and processes new or changed content through the text conversion and chunking pipeline.
+Text Conversion Layer normalises all file formats including MP4 recordings into plain text before any embedding occurs.
+Knowledge Store is a self-hosted Postgres + pgvector database holding chunked text, embeddings, and document metadata. An MCP server exposes semantic and keyword search over it.
+Web UI provides document upload, ingestion status, document inventory, and the doc generation interface.
+Review Workflow routes generated drafts to a reviewer via email with accept, reject-with-feedback, or abandon actions. Accepted drafts are published to BookStack. Rejected drafts return to the queue with feedback attached.
+
+Content Sources
+Three ingestion paths feed the same pipeline. All three are treated identically once content enters the text conversion layer.
+Source 1: Local folder
+A designated folder on the VOZIQ server is the primary curated source. Content curation happens here -- only documents placed in this folder are ingested. The ingestion service watches this folder using filesystem events and also runs a full reconciliation sweep on a nightly schedule. Removed files are tombstoned in the knowledge store (chunks retained but marked inactive) rather than hard-deleted, to preserve provenance of any generated docs that cited them.
+Source 2: Web UI upload
+A browser-based upload interface accepts files directly. Useful for content that does not originate in the local folder or email -- exported reports, reference documents, external PDFs. Uploaded files are tagged with the uploader identity (if auth is added later) and the upload timestamp. The UI shows a processing status per file and a full document inventory.
+Source 3: Email (Outlook)
+An Outlook mailbox is monitored for incoming emails. Any attachment on an email to the designated address is extracted and treated as a document submission. The email body itself is also captured as a text document if it is substantive (more than a configurable minimum word count, to filter out forwarding noise). The sender, subject, and received timestamp are stored as document metadata.
+This same mailbox is also where draft review emails are sent and where approval/rejection replies are received. The system must distinguish between inbound content submissions and inbound review responses. A structured reply format (see Review Workflow section) handles this.
+
+Text Conversion Layer
+All files are converted to plain text as the first step after ingestion. No binary content enters the knowledge store.
+Conversion by file type:
+
+Word (.docx): python-docx. Heading structure is preserved as section markers to improve chunking quality.
+PDF: pymupdf (fitz). Scanned PDFs with no extractable text layer are flagged for manual review rather than ingested as empty documents.
+PowerPoint (.pptx): python-pptx. Slide titles and speaker notes are extracted. Each slide is treated as a logical unit.
+Plain text / Markdown: Minimal cleaning, pass through.
+Email body: Extracted as plain text with subject as title.
+MP4 (Teams recordings): See below.
+
+MP4 transcription
+The pipeline is: extract audio from MP4 via ffmpeg, convert to mono 16kHz WAV, transcribe via faster-whisper running locally on the Quadro M4000.
+Hardware note. The Quadro M4000 has 8GB GDDR5 VRAM but is a Maxwell architecture card (2015, Compute Capability 5.2). 8GB cards could not run the Whisper large model under PyTorch in benchmarks. The safe model choice is Whisper medium, which needs approximately 5GB VRAM and delivers very good accuracy on English business speech. Large-v3 should not be targeted on this hardware. If transcription accuracy becomes a problem for specific content (non-native speakers, heavy technical terminology), upgrading the GPU is the right fix rather than attempting workarounds. Medium
+Using faster-whisper instead of the original OpenAI Whisper implementation gives a 2-4x speed improvement with identical accuracy via its CTranslate2 backend. On the M4000 with the medium model, expect roughly 2-3x real-time speed -- a one-hour recording transcribes in 20-30 minutes. Microsoft Learn
+Transcription runs asynchronously in a queue. Uploading or placing an MP4 in the local folder returns immediately; the transcription job is queued and the document status in the UI shows "transcribing" until complete.
+The transcript is stored as a text document with metadata: source filename, recording date (parsed from filename if available, otherwise file modification date), duration in minutes, and the Whisper model version used. Speaker labels are not available without a separate diarization step; this is out of scope for this phase.
+
+Functional Requirements
+Ingestion Pipeline
+
+The local folder watcher detects new files, modified files, and deleted files via filesystem events, with a nightly full reconciliation as a fallback.
+The email monitor polls the designated Outlook mailbox via Microsoft Graph API on a configurable interval (suggest every 15 minutes). It distinguishes content submissions from review responses by email subject prefix or a structured header.
+All documents are deduplicated by SHA-256 hash of the source file. Unchanged documents are skipped on re-ingestion. Changed documents have existing chunks marked stale and replaced.
+Chunks respect semantic boundaries. Headings and paragraph breaks are preferred split points. Target chunk size: 400-600 tokens with 50-token overlap.
+Every chunk stores: source document ID, document title, source type (folder / upload / email), file type, content date, chunk index, and SHA-256 hash of the source document.
+The Whisper model version and Ollama embedding model version are recorded per document at ingestion time. When either model changes, affected documents can be identified for re-processing.
+Every ingestion run produces a log entry per document: skipped (unchanged), added, updated, transcribing, failed (with reason). Failed documents do not silently disappear.
+
+Knowledge Store
+
+Self-hosted Postgres + pgvector running in Docker.
+Three-table schema: documents (one row per source), chunks (text, metadata, chunk index), chunk_embeddings (vectors linked to chunks). Embeddings are stored separately from chunk text so the corpus can be re-embedded when the local model changes without losing source content.
+Metadata columns on chunks are typed Postgres columns, not JSONB, to enable efficient pre-filtered queries before vector search.
+Retrieval uses hybrid search: vector similarity combined with BM25 keyword search. Pure vector search performs poorly on content containing specific names, product identifiers, and internal terminology.
+An MCP server exposes: semantic search by query string, filtered search by source type or date range, document fetch by ID, chunk fetch by document ID, and ingestion status summary.
+The knowledge store serves both the doc generation workflow and live Q&A queries from the team via Claude. Both access the same store through the same MCP interface.
+
+Web UI
+
+Document upload accepting all supported file types up to 500MB (to accommodate large MP4s).
+Ingestion status per document: queued, transcribing, processing, indexed, failed.
+Document inventory: title, source type, file type, content date, chunk count, last ingestion status, active/tombstoned flag.
+Doc generation interface: topic prompt input, document type selector (process doc, architecture overview, meeting summary, decision record, ADR, release note), optional source document filter, and a "Generate draft" action.
+Generated draft view with source citations visible inline before sending for review.
+
+Doc Generation
+
+Claude receives a topic prompt plus retrieved chunks from the knowledge store and produces a structured draft in the requested document type format.
+Every factual claim in the draft must cite the source document and chunk index. This is enforced via the system prompt, not left to Claude's discretion.
+Before sending for review, the draft is displayed in the UI for the requestor to read and optionally edit.
+Sending for review triggers an email to the designated reviewer mailbox.
+
+Review Workflow
+The review email contains: the draft content, a list of source citations, and three reply options with structured subject-line prefixes the system can parse.
+
+ACCEPT -- the draft is published to BookStack as-is via the BookStack API.
+REJECT:[feedback text] -- the draft is returned to the requestor in the UI with the feedback attached. The requestor can edit the draft and re-submit for review, or discard it.
+ABANDON -- the draft is discarded with no further action.
+
+The system monitors the review mailbox for replies with these prefixes. A reply without a recognised prefix is ignored and the draft remains in "pending review" state. Drafts in pending review for more than a configurable timeout (suggest 5 days) are flagged in the UI.
+No draft is ever published to BookStack without an explicit ACCEPT reply. There is no auto-publish path.
+
+Non-Functional Requirements
+
+All data stays within the VOZIQ environment. Embedding generation, transcription, and storage are entirely local. Claude API calls send only retrieved chunk text as context -- not raw documents, full transcripts, or source files.
+The system handles at least 50,000 chunks without search latency exceeding 2 seconds per query.
+MP4 transcription runs asynchronously and does not block ingestion of other document types.
+Re-running ingestion against an unchanged corpus produces no changes and no duplicate chunks.
+Chunk metadata schema changes are applied via versioned SQL migrations. No destructive schema changes without a migration.
+The ingestion queue persists across service restarts. An MP4 mid-transcription when the service restarts should resume or re-queue, not silently fail.
+
+
+Out of Scope (this phase)
+
+Speaker diarization for MP4 transcripts.
+Permission-aware retrieval aligned to SharePoint or folder-level access controls.
+Multi-user access control on the web UI or knowledge store (internal network only).
+Automated publishing to BookStack without a human ACCEPT action.
+Ingestion from sources other than the local folder, web UI, and Outlook email.
+Fine-tuning any model on VOZIQ content.
+Real-time transcription of live meetings.
+Whisper large-v3 model (requires GPU upgrade first).
+
+
+Key Risks
+M4000 CUDA compatibility. The Quadro M4000 is Maxwell architecture. Verify that faster-whisper with CTranslate2 installs and runs correctly against the CUDA version on the server before committing to this hardware. If there are CUDA/cuDNN version conflicts, the fallback is CPU transcription, which is significantly slower.
+Email parsing reliability. Parsing reply structure from Outlook emails is fragile. Users replying on mobile, through a mail client that adds quoted text, or with non-standard formatting can break the subject-line prefix approach. The review email should include explicit instructions, and the system should handle malformed replies gracefully (ignore, not crash or auto-publish).
+Transcript quality for VOZIQ-specific terminology. Whisper medium is accurate on general English but will mis-transcribe internal product names, client names, and domain vocabulary it has not seen. A post-transcription pass using a VOZIQ terminology dictionary can correct known terms before chunking. Without this, searches for specific internal terms may miss content that exists in transcripts but was transcribed incorrectly.
+Source quality in the local folder. Curation of the local folder is as important as the ingestion pipeline. Someone needs to own what goes in the folder as an ongoing responsibility, not a one-time setup task. Outdated documents, drafts, and conflicting versions in the folder produce outdated, draft-quality, and conflicting documentation.
+Stale published docs. Once a document is published to BookStack, it has no live connection to the knowledge store. If source material changes and is re-ingested, the published doc does not update. A mechanism to flag BookStack pages whose source documents have been modified since publication is needed before the corpus grows large enough that manual tracking becomes impractical.
+Hallucination at coverage gaps. When retrieved chunks do not fully cover a topic, Claude fills gaps from its own knowledge. The source citation requirement and the review gate are the mitigations. They only work if the reviewer actually reads the draft critically rather than rubber-stamping it.
