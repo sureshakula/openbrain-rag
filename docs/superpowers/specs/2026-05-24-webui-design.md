@@ -183,52 +183,49 @@ Browser ─POST /drafts/{id}/abandon─▶ drafts.py
 
 ## Database changes
 
+Existing schema uses `SERIAL` PKs and `documents.status` as plain `TEXT`. Stay consistent — no UUIDs, no Postgres ENUM types, status stays TEXT with expanded allowed values enforced in app code (matches existing pattern).
+
 New tables:
 
 ```sql
-CREATE TYPE draft_status AS ENUM ('pending', 'accepted', 'rejected', 'abandoned');
-
-CREATE TABLE drafts (
-  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  topic         TEXT NOT NULL,
-  doc_type      TEXT NOT NULL,
-  body_markdown TEXT NOT NULL,
-  source_filter JSONB,
-  status        draft_status NOT NULL DEFAULT 'pending',
-  feedback      TEXT,
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-  reviewed_at   TIMESTAMPTZ
+CREATE TABLE IF NOT EXISTS drafts (
+  id             SERIAL PRIMARY KEY,
+  topic          TEXT NOT NULL,
+  doc_type       TEXT NOT NULL,
+  body_markdown  TEXT NOT NULL,
+  source_filter  JSONB,
+  status         TEXT NOT NULL DEFAULT 'pending',  -- 'pending' | 'accepted' | 'rejected' | 'abandoned'
+  feedback       TEXT,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  reviewed_at    TIMESTAMPTZ
 );
 
-CREATE TABLE draft_citations (
-  draft_id        UUID NOT NULL REFERENCES drafts(id) ON DELETE CASCADE,
-  chunk_id        UUID NOT NULL REFERENCES chunks(id) ON DELETE CASCADE,
-  citation_index  INT  NOT NULL,
+CREATE TABLE IF NOT EXISTS draft_citations (
+  draft_id        INTEGER NOT NULL REFERENCES drafts(id) ON DELETE CASCADE,
+  chunk_id        INTEGER NOT NULL REFERENCES chunks(id) ON DELETE CASCADE,
+  citation_index  INTEGER NOT NULL,
   PRIMARY KEY (draft_id, citation_index)
 );
 
-CREATE INDEX drafts_status_idx ON drafts(status);
-CREATE INDEX drafts_created_idx ON drafts(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_drafts_status ON drafts(status);
+CREATE INDEX IF NOT EXISTS idx_drafts_created ON drafts(created_at DESC);
 ```
 
-Existing `documents` table extended:
+Existing `documents` table extended. `status` already exists as TEXT — add new allowed values: `'queued' | 'processing' | 'transcribing' | 'indexed' | 'failed'` (keep existing `'pending' | 'chunked' | 'synthesized' | 'failed'` as legacy for the existing CLI ingester; the webui worker uses the new set).
 
 ```sql
-CREATE TYPE document_status AS ENUM
-  ('queued', 'processing', 'transcribing', 'indexed', 'failed');
-
 ALTER TABLE documents
-  ADD COLUMN status         document_status NOT NULL DEFAULT 'indexed',
-  ADD COLUMN failure_reason TEXT,
-  ADD COLUMN active         BOOLEAN NOT NULL DEFAULT TRUE,
-  ADD COLUMN file_size      BIGINT,
-  ADD COLUMN file_extension TEXT;
+  ADD COLUMN IF NOT EXISTS failure_reason TEXT,
+  ADD COLUMN IF NOT EXISTS active         BOOLEAN NOT NULL DEFAULT TRUE,
+  ADD COLUMN IF NOT EXISTS file_size      BIGINT,
+  ADD COLUMN IF NOT EXISTS file_extension TEXT;
 
-CREATE INDEX documents_status_idx ON documents(status);
-CREATE INDEX documents_active_idx ON documents(active);
+CREATE INDEX IF NOT EXISTS idx_documents_active ON documents(active);
 ```
 
-Migrations go in `db/migrations/` as plain `.sql` files numbered sequentially. No alembic for now — keep it simple, parent spec acknowledges this is a gap.
+(`idx_documents_status` already exists in current schema.)
+
+New schema additions appended to `db/schema.sql` (idempotent `IF NOT EXISTS` matches existing file pattern). No migration runner needed — re-running `psql -f db/schema.sql` is safe.
 
 ## Retrieval layer
 
