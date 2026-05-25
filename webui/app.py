@@ -23,6 +23,23 @@ def get_templates() -> Jinja2Templates:
     return TEMPLATES
 
 
+def _pending_drafts_count() -> int:
+    from db.connection import get_conn
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT COUNT(*) FROM drafts WHERE status='pending'")
+                return cur.fetchone()[0] or 0
+    except Exception:
+        return 0
+
+
+def render(request, template: str, ctx: dict):
+    """TemplateResponse wrapper that injects sidebar-wide context."""
+    ctx = {**ctx, "pending_drafts": _pending_drafts_count()}
+    return TEMPLATES.TemplateResponse(request, template, ctx)
+
+
 def create_app(*, start_workers: bool = True) -> FastAPI:
     queue = IngestQueue()
 

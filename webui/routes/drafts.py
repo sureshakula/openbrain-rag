@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse
 
 from db.connection import get_conn
 from publish.bookstack_stub import publish
-from webui.app import get_templates
+from webui.app import render
 
 router = APIRouter()
 
@@ -54,7 +54,7 @@ def _get_draft(draft_id: int) -> dict | None:
 
 @router.get("/drafts", response_class=HTMLResponse)
 async def drafts_list(request: Request):
-    return get_templates().TemplateResponse(
+    return render(
         request, "drafts.html",
         {"page": "drafts", "drafts": _all_drafts()},
     )
@@ -65,7 +65,7 @@ async def draft_detail(request: Request, draft_id: int):
     draft = _get_draft(draft_id)
     if not draft:
         raise HTTPException(404, "draft not found")
-    return get_templates().TemplateResponse(
+    return render(
         request, "_draft_detail.html",
         {"draft": draft},
     )
@@ -73,7 +73,7 @@ async def draft_detail(request: Request, draft_id: int):
 
 @router.get("/drafts/{draft_id}/reject-form", response_class=HTMLResponse)
 async def draft_reject_form(request: Request, draft_id: int):
-    return get_templates().TemplateResponse(
+    return render(
         request, "_reject_form.html",
         {"draft_id": draft_id},
     )

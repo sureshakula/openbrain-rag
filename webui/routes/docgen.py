@@ -9,14 +9,14 @@ from psycopg2.extras import Json
 from db.connection import get_conn
 from retrieval.search import search, SearchFilters
 from synthesis.generate import generate, DOC_TYPES
-from webui.app import get_templates
+from webui.app import render
 
 router = APIRouter()
 
 
 @router.get("/docgen", response_class=HTMLResponse)
 async def docgen_form(request: Request):
-    return get_templates().TemplateResponse(
+    return render(
         request, "docgen.html",
         {"page": "docgen", "doc_types": DOC_TYPES},
     )
@@ -57,7 +57,7 @@ async def docgen_generate(
                     (draft_id, c.chunk_id, c.citation_index),
                 )
 
-    return get_templates().TemplateResponse(
+    return render(
         request, "_docgen_draft.html",
         {"draft_id": draft_id, "body": body, "citations": citations},
     )

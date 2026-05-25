@@ -4,7 +4,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
 from db.connection import get_conn
-from webui.app import get_templates
+from webui.app import render
 
 router = APIRouter()
 
@@ -58,7 +58,7 @@ async def inventory(request: Request,
                     source: str | None = None,
                     ftype: str | None = None,
                     search: str | None = None):
-    return get_templates().TemplateResponse(
+    return render(
         request, "inventory.html",
         {"page": "inventory",
          "rows": _query_docs(status=status, source=source, ftype=ftype, search=search),
@@ -74,7 +74,7 @@ async def inventory_rows(request: Request,
                          source: str | None = None,
                          ftype: str | None = None,
                          search: str | None = None):
-    return get_templates().TemplateResponse(
+    return render(
         request, "_inventory_rows.html",
         {"rows": _query_docs(status=status, source=source, ftype=ftype, search=search)},
     )

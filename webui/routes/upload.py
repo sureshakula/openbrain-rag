@@ -9,14 +9,14 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 import config
 from db.connection import get_conn
 from ingestion.core import insert_document, sha256_text
-from webui.app import get_templates
+from webui.app import render
 
 router = APIRouter()
 
 
 @router.get("/upload", response_class=HTMLResponse)
 async def upload_form(request: Request):
-    return get_templates().TemplateResponse(
+    return render(
         request, "upload.html",
         {"page": "upload"},
     )

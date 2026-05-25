@@ -27,3 +27,17 @@ async def test_health(client):
     r = await client.get("/health")
     assert r.status_code == 200
     assert r.json() == {"status": "ok"}
+
+
+async def test_pending_drafts_badge_in_inventory(client, db):
+    with db.cursor() as cur:
+        cur.execute(
+            """INSERT INTO drafts (topic, doc_type, body_markdown, status)
+               VALUES ('t1', 'process', 'b', 'pending'),
+                      ('t2', 'process', 'b', 'pending'),
+                      ('t3', 'process', 'b', 'accepted')"""
+        )
+    db.commit()
+    r = await client.get("/inventory")
+    assert "badge" in r.text
+    assert ">2<" in r.text
