@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Drafts — OpenBrain{% endblock %}
+{% block content %}
+<div class="toolbar"><h2>Drafts</h2></div>
+
+<div class="split">
+  <div class="left">
+    {% for d in drafts %}
+      <div style="padding: 10px 12px; border-bottom: 1px solid var(--border); cursor: pointer;"
+           hx-get="/drafts/{{ d.id }}" hx-target="#draft-pane" hx-swap="innerHTML">
+        <div style="font-weight: 500;">{{ d.topic }}</div>
+        <div style="color: var(--muted); font-size: 11px;">
+          <span class="status {{ 'failed' if d.status == 'rejected' else
+                                   'indexed' if d.status == 'accepted' else '' }}">{{ d.status }}</span>
+          · {{ d.doc_type }} · {{ d.created_at.strftime('%Y-%m-%d %H:%M') }}
+        </div>
+      </div>
+    {% endfor %}
+    {% if not drafts %}
+      <div style="color: var(--muted); padding: 24px; text-align: center;">No drafts yet.</div>
+    {% endif %}
+  </div>
+
+  <div class="right">
+    <div id="draft-pane">
+      <div style="color: var(--muted); text-align: center; padding: 40px 0;">Select a draft.</div>
+    </div>
+  </div>
+</div>
+{% endblock %}

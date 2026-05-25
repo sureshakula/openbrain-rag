@@ -1,0 +1,40 @@
+<div class="toolbar">
+  <div>
+    <h3 style="margin: 0;">{{ draft.topic }}</h3>
+    <div style="color: var(--muted); font-size: 11px;">
+      {{ draft.doc_type }} · {{ draft.created_at.strftime('%Y-%m-%d %H:%M') }} · status: {{ draft.status }}
+    </div>
+  </div>
+  {% if draft.status == 'pending' %}
+  <div style="display: flex; gap: 6px;">
+    <button class="btn danger"
+            hx-get="/drafts/{{ draft.id }}/reject-form"
+            hx-target="#action-result" hx-swap="innerHTML">Reject</button>
+    <button class="btn muted"
+            hx-post="/drafts/{{ draft.id }}/abandon"
+            hx-target="#action-result" hx-swap="innerHTML"
+            hx-confirm="Abandon this draft?">Abandon</button>
+    <button class="btn success"
+            hx-post="/drafts/{{ draft.id }}/accept"
+            hx-target="#action-result" hx-swap="innerHTML"
+            hx-confirm="Publish to BookStack (stub) and mark accepted?">Accept → BookStack</button>
+  </div>
+  {% endif %}
+</div>
+
+<div class="draft-body">{{ draft.body_markdown }}</div>
+
+<div class="sources">
+  <strong>Sources</strong>
+  {% for c in draft.citations %}
+    <div>[{{ c.citation_index }}] {{ c.document_title }}</div>
+  {% endfor %}
+</div>
+
+{% if draft.feedback %}
+<div class="error-banner" style="margin-top: 14px;">
+  <strong>Reviewer feedback:</strong> {{ draft.feedback }}
+</div>
+{% endif %}
+
+<div id="action-result" style="margin-top: 14px;"></div>

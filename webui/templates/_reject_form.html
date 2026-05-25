@@ -1,0 +1,7 @@
+<form hx-post="/drafts/{{ draft_id }}/reject"
+      hx-target="#action-result" hx-swap="innerHTML"
+      style="display: flex; gap: 6px; margin-top: 6px;">
+  <textarea name="feedback" required class="input" rows="2" style="flex: 1;"
+            placeholder="What needs to change?"></textarea>
+  <button type="submit" class="btn danger" style="align-self: stretch;">Submit reject</button>
+</form>
