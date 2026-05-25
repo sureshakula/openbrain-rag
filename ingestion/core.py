@@ -55,9 +55,18 @@ def embed(text: str, timeout: int = 30) -> list[float] | None:
         return None
 
 
+DEFAULT_NAMESPACE = "general"
+
+# Suggested namespaces shown in upload UI dropdown. Free-form: any string allowed.
+SUGGESTED_NAMESPACES = [
+    "general", "code", "operations", "product", "sales_marketing", "company_hr",
+]
+
+
 def insert_document(conn, *, source_type: str, source_ref: str, title: str,
                     raw_content: str, content_hash: str, file_size: int | None,
                     file_extension: str | None, status: str,
+                    namespace: str = DEFAULT_NAMESPACE,
                     metadata: dict | None = None) -> int:
     """Insert a document row. Returns new document id."""
     metadata = metadata or {}
@@ -66,12 +75,13 @@ def insert_document(conn, *, source_type: str, source_ref: str, title: str,
             """
             INSERT INTO documents
                 (source_type, source_ref, title, content_hash, raw_content,
-                 metadata, status, file_size, file_extension)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 metadata, status, file_size, file_extension, namespace)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
             """,
             (source_type, source_ref, title, content_hash, raw_content,
-             psycopg2.extras.Json(metadata), status, file_size, file_extension),
+             psycopg2.extras.Json(metadata), status, file_size, file_extension,
+             namespace or DEFAULT_NAMESPACE),
         )
         return cur.fetchone()[0]
 

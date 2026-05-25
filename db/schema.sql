@@ -137,9 +137,11 @@ ALTER TABLE documents
     ADD COLUMN IF NOT EXISTS failure_reason TEXT,
     ADD COLUMN IF NOT EXISTS active         BOOLEAN NOT NULL DEFAULT TRUE,
     ADD COLUMN IF NOT EXISTS file_size      BIGINT,
-    ADD COLUMN IF NOT EXISTS file_extension TEXT;
+    ADD COLUMN IF NOT EXISTS file_extension TEXT,
+    ADD COLUMN IF NOT EXISTS namespace      TEXT NOT NULL DEFAULT 'general';
 
-CREATE INDEX IF NOT EXISTS idx_documents_active ON documents(active);
+CREATE INDEX IF NOT EXISTS idx_documents_active    ON documents(active);
+CREATE INDEX IF NOT EXISTS idx_documents_namespace ON documents(namespace);
 
 -- ─────────────────────────────────────────
 -- WEBUI: BM25 SUPPORT

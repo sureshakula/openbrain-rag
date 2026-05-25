@@ -19,7 +19,9 @@ from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
 from db.connection import get_conn
-from ingestion.core import document_exists, insert_document, sha256_text
+from ingestion.core import (
+    DEFAULT_NAMESPACE, document_exists, insert_document, sha256_text,
+)
 from webui.workers.ingest_queue import IngestQueue
 
 log = logging.getLogger("openbrain.watcher")
@@ -111,15 +113,34 @@ class FolderWatcher:
         finally:
             self._inflight.discard(key)
 
+    def _namespace_for(self, path: Path) -> str:
+        """Derive namespace from path's first subfolder under watch_dir.
+
+        watch_dir/foo.md           → 'general'
+        watch_dir/code/foo.py      → 'code'
+        watch_dir/sales/q3/x.pdf   → 'sales' (only first segment)
+        """
+        try:
+            rel = path.relative_to(self.watch_dir)
+        except ValueError:
+            return DEFAULT_NAMESPACE
+        parts = rel.parts
+        if len(parts) <= 1:
+            return DEFAULT_NAMESPACE
+        return parts[0].strip().lower() or DEFAULT_NAMESPACE
+
     async def _maybe_enqueue(self, path: Path) -> None:
         loop = asyncio.get_running_loop()
-        doc_id = await loop.run_in_executor(None, self._sync_check_and_insert, path)
+        ns = self._namespace_for(path)
+        doc_id = await loop.run_in_executor(
+            None, self._sync_check_and_insert, path, ns
+        )
         if doc_id is not None:
             await self.queue.enqueue(doc_id, path)
-            log.info("watcher enqueued %s as doc %d", path.name, doc_id)
+            log.info("watcher enqueued %s as doc %d (ns=%s)", path.name, doc_id, ns)
 
     @staticmethod
-    def _sync_check_and_insert(path: Path) -> int | None:
+    def _sync_check_and_insert(path: Path, namespace: str) -> int | None:
         try:
             data = path.read_bytes()
         except OSError as e:
@@ -139,5 +160,6 @@ class FolderWatcher:
                 file_size=len(data),
                 file_extension=path.suffix.lower(),
                 status="queued",
-                metadata={"watcher": True},
+                namespace=namespace,
+                metadata={"watcher": True, "namespace": namespace},
             )

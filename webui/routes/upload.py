@@ -3,12 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 import config
 from db.connection import get_conn
-from ingestion.core import insert_document, sha256_text
+from ingestion.core import DEFAULT_NAMESPACE, SUGGESTED_NAMESPACES, insert_document, sha256_text
 from webui.app import render
 
 router = APIRouter()
@@ -18,12 +18,15 @@ router = APIRouter()
 async def upload_form(request: Request):
     return render(
         request, "upload.html",
-        {"page": "upload"},
+        {"page": "upload", "namespaces": SUGGESTED_NAMESPACES,
+         "default_namespace": DEFAULT_NAMESPACE},
     )
 
 
 @router.post("/upload")
-async def upload_post(request: Request, file: UploadFile = File(...)):
+async def upload_post(request: Request,
+                      file: UploadFile = File(...),
+                      namespace: str = Form(DEFAULT_NAMESPACE)):
     max_bytes = config.MAX_UPLOAD_MB * 1024 * 1024
     data = await file.read()
     if len(data) > max_bytes:
@@ -48,6 +51,7 @@ async def upload_post(request: Request, file: UploadFile = File(...)):
             file_size=len(data),
             file_extension=ext,
             status="queued",
+            namespace=(namespace or DEFAULT_NAMESPACE).strip().lower(),
             metadata={"original_filename": file.filename},
         )
 

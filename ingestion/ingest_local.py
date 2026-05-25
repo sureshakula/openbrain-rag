@@ -49,13 +49,15 @@ def read_file(path: Path) -> str | None:
 
 # ── Reusable core ──────────────────────────────────────────────────────────────
 from ingestion.core import (
-    chunk_text, embed, document_exists, insert_chunks, set_status, sha256_text
+    DEFAULT_NAMESPACE, chunk_text, embed, document_exists,
+    insert_chunks, set_status, sha256_text,
 )
 
 
 # ── Document insert (CLI-specific: 'local_file', from filesystem) ──────────────
 
-def insert_document(conn, path: Path, content: str, content_hash: str) -> int:
+def insert_document(conn, path: Path, content: str, content_hash: str,
+                    namespace: str = DEFAULT_NAMESPACE) -> int:
     from ingestion.core import insert_document as _insert
     return _insert(
         conn,
@@ -67,7 +69,9 @@ def insert_document(conn, path: Path, content: str, content_hash: str) -> int:
         file_size=path.stat().st_size,
         file_extension=path.suffix,
         status="pending",
-        metadata={"extension": path.suffix, "size_bytes": path.stat().st_size},
+        namespace=namespace,
+        metadata={"extension": path.suffix, "size_bytes": path.stat().st_size,
+                  "namespace": namespace},
     )
 
 
@@ -77,7 +81,8 @@ def mark_chunked(conn, document_id: int) -> None:
 
 # ── Main ───────────────────────────────────────────────────────────────────────
 
-def ingest_file(conn, path: Path, dry_run: bool = False) -> bool:
+def ingest_file(conn, path: Path, dry_run: bool = False,
+                namespace: str = DEFAULT_NAMESPACE) -> bool:
     """Ingest a single file. Returns True if processed, False if skipped."""
     content = read_file(path)
     if content is None:
