@@ -47,118 +47,32 @@ def read_file(path: Path) -> str | None:
         return None
 
 
-# ── Chunking ───────────────────────────────────────────────────────────────────
-
-def chunk_text(text: str, chunk_size: int = CHUNK_SIZE,
-               overlap: int = CHUNK_OVERLAP) -> list[str]:
-    """
-    Simple character-based chunking with overlap.
-    Tries to split on paragraph boundaries first, then falls back to character windows.
-    chunk_size and overlap are in approximate characters (4 chars ≈ 1 token).
-    """
-    char_size = chunk_size * 4
-    char_overlap = overlap * 4
-
-    # Split on double newlines (paragraph boundaries)
-    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
-
-    chunks: list[str] = []
-    current = ""
-
-    for para in paragraphs:
-        if len(current) + len(para) + 2 <= char_size:
-            current = (current + "\n\n" + para).strip()
-        else:
-            if current:
-                chunks.append(current)
-            # Para itself exceeds chunk size — hard split
-            if len(para) > char_size:
-                for i in range(0, len(para), char_size - char_overlap):
-                    chunks.append(para[i:i + char_size])
-            else:
-                current = para
-
-    if current:
-        chunks.append(current)
-
-    return chunks
+# ── Reusable core ──────────────────────────────────────────────────────────────
+from ingestion.core import (
+    chunk_text, embed, document_exists, insert_chunks, set_status, sha256_text
+)
 
 
-# ── Embeddings ─────────────────────────────────────────────────────────────────
-
-def embed(text: str) -> list[float] | None:
-    """Call Ollama to get an embedding vector."""
-    try:
-        resp = requests.post(
-            f"{OLLAMA_BASE_URL}/api/embeddings",
-            json={"model": EMBEDDING_MODEL, "prompt": text},
-            timeout=30,
-        )
-        resp.raise_for_status()
-        return resp.json()["embedding"]
-    except Exception as e:
-        print(f"  ⚠ Embedding failed: {e}")
-        return None
-
-
-# ── DB writes ──────────────────────────────────────────────────────────────────
-
-def document_exists(conn, content_hash: str) -> bool:
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT 1 FROM documents WHERE content_hash = %s",
-            (content_hash,)
-        )
-        return cur.fetchone() is not None
-
+# ── Document insert (CLI-specific: 'local_file', from filesystem) ──────────────
 
 def insert_document(conn, path: Path, content: str, content_hash: str) -> int:
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            INSERT INTO documents
-                (source_type, source_ref, title, content_hash, raw_content, metadata, status)
-            VALUES ('local_file', %s, %s, %s, %s, %s, 'pending')
-            RETURNING id
-            """,
-            (
-                str(path),
-                path.stem,
-                content_hash,
-                content,
-                psycopg2.extras.Json({"extension": path.suffix, "size_bytes": path.stat().st_size}),
-            )
-        )
-        return cur.fetchone()[0]
+    from ingestion.core import insert_document as _insert
+    return _insert(
+        conn,
+        source_type="local_file",
+        source_ref=str(path),
+        title=path.stem,
+        raw_content=content,
+        content_hash=content_hash,
+        file_size=path.stat().st_size,
+        file_extension=path.suffix,
+        status="pending",
+        metadata={"extension": path.suffix, "size_bytes": path.stat().st_size},
+    )
 
 
-def insert_chunks(conn, document_id: int, chunks: list[str],
-                  embeddings: list[list[float] | None]):
-    with conn.cursor() as cur:
-        for i, (chunk, emb) in enumerate(zip(chunks, embeddings)):
-            chunk_hash = sha256(chunk)
-            token_count = len(chunk) // 4  # rough approximation
-
-            # pgvector expects a list as a string like '[0.1, 0.2, ...]'
-            emb_str = str(emb) if emb else None
-
-            cur.execute(
-                """
-                INSERT INTO chunks
-                    (document_id, chunk_index, content, content_hash, token_count, embedding)
-                VALUES (%s, %s, %s, %s, %s, %s::vector)
-                ON CONFLICT DO NOTHING
-                """,
-                (document_id, i, chunk, chunk_hash, token_count, emb_str)
-            )
-
-
-def mark_chunked(conn, document_id: int):
-    with conn.cursor() as cur:
-        cur.execute(
-            "UPDATE documents SET status='chunked' WHERE id=%s",
-            (document_id,)
-        )
+def mark_chunked(conn, document_id: int) -> None:
+    set_status(conn, document_id, "chunked")
 
 
 # ── Main ───────────────────────────────────────────────────────────────────────
@@ -171,7 +85,7 @@ def ingest_file(conn, path: Path, dry_run: bool = False) -> bool:
 
     content_hash = sha256(content)
 
-    if document_exists(conn, content_hash):
+    if document_exists(conn, content_hash) is not None:
         print(f"  = {path.name} — already ingested (hash match), skipping")
         return False
 
