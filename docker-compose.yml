@@ -32,6 +32,8 @@ services:
       VB_UPLOAD_DIR: /data/uploads
       VB_MAX_UPLOAD_MB: ${VB_MAX_UPLOAD_MB:-500}
       VB_INGEST_WORKER_COUNT: ${VB_INGEST_WORKER_COUNT:-2}
+      VB_WATCH_DIR: ${VB_WATCH_DIR:-/data/watch}
+      VB_WATCH_DEBOUNCE_SEC: ${VB_WATCH_DEBOUNCE_SEC:-2}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANTHROPIC_AUTH_TOKEN: ${ANTHROPIC_AUTH_TOKEN:-}
       ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-https://api.anthropic.com}
@@ -43,6 +45,7 @@ services:
     volumes:
       - .:/app
       - ./uploads:/data/uploads
+      - ./watch:/data/watch
     extra_hosts:
       - "host.docker.internal:host-gateway"
     command: >

@@ -45,6 +45,33 @@ docker compose down          # keep volumes
 rm -rf pgdata uploads        # also wipe data
 ```
 
+## Folder watcher
+
+Drop files into `./watch/` and they auto-ingest within ~2s (debounce + sha256 dedup). Subdirectories scanned recursively. Hidden files and `.tmp/.swp/.part/.crdownload/.lock` extensions skipped.
+
+Same supported types as `/upload` (txt/md/rst/py/sql/csv/pdf/docx/pptx; mp4 marks failed).
+
+Disable by setting `VB_WATCH_DIR=` (empty).
+
+```bash
+echo "# my note" > watch/note.md     # → indexed within ~5s
+```
+
+## Reset
+
+Wipe DB rows (and optionally upload/watch files):
+
+```bash
+# inside compose
+docker compose exec app python scripts/reset.py --yes              # truncate tables
+docker compose exec app python scripts/reset.py --yes --files      # tables + files
+
+# preview only
+docker compose exec app python scripts/reset.py --dry-run
+```
+
+Flags: `--keep <table>` skips a specific table; `--db <name>` targets a specific DB.
+
 ## Webui pages
 
 | Route | Purpose |

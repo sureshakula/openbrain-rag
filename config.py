@@ -41,6 +41,10 @@ UPLOAD_DIR          = os.getenv("VB_UPLOAD_DIR", "./uploads")
 MAX_UPLOAD_MB       = int(os.getenv("VB_MAX_UPLOAD_MB", "500"))
 INGEST_WORKER_COUNT = int(os.getenv("VB_INGEST_WORKER_COUNT", "2"))
 
+# ── Folder Watcher (empty = disabled) ─────────────────────
+WATCH_DIR           = os.getenv("VB_WATCH_DIR", "")
+WATCH_DEBOUNCE_SEC  = int(os.getenv("VB_WATCH_DEBOUNCE_SEC", "2"))
+
 # ── Retrieval ─────────────────────────────────────────────
 RETRIEVAL_TOP_K     = int(os.getenv("VB_RETRIEVAL_TOP_K", "12"))
 RETRIEVAL_RRF_K     = int(os.getenv("VB_RETRIEVAL_RRF_K", "60"))  # RRF constant

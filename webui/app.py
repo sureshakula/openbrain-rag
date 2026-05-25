@@ -9,8 +9,9 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from config import INGEST_WORKER_COUNT
+from config import INGEST_WORKER_COUNT, WATCH_DIR, WATCH_DEBOUNCE_SEC
 from webui.workers.ingest_queue import IngestQueue
+from webui.workers.folder_watcher import FolderWatcher
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("openbrain.app")
@@ -45,12 +46,24 @@ def create_app(*, start_workers: bool = True) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
+        watcher: FolderWatcher | None = None
         if start_workers:
             await queue.start(worker_count=INGEST_WORKER_COUNT)
             log.info("ingest queue started with %d workers", INGEST_WORKER_COUNT)
+            if WATCH_DIR:
+                watch_path = Path(WATCH_DIR)
+                if watch_path.is_dir():
+                    watcher = FolderWatcher(watch_path, queue,
+                                            debounce_sec=WATCH_DEBOUNCE_SEC)
+                    await watcher.start()
+                else:
+                    log.warning("VB_WATCH_DIR=%s is not a directory; watcher disabled",
+                                WATCH_DIR)
         try:
             yield {"queue": queue}
         finally:
+            if watcher:
+                await watcher.stop()
             if start_workers:
                 await queue.stop()
 
