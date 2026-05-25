@@ -1,0 +1,49 @@
+import asyncio
+import pytest
+from pathlib import Path
+from httpx import AsyncClient, ASGITransport
+
+from webui.app import create_app
+
+
+@pytest.fixture
+async def client(tmp_upload_dir, monkeypatch):
+    monkeypatch.setenv("VB_UPLOAD_DIR", str(tmp_upload_dir))
+    import importlib, config as _config
+    importlib.reload(_config)
+    app = create_app(start_workers=False)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        yield c
+
+
+async def test_get_upload_form(client):
+    r = await client.get("/upload")
+    assert r.status_code == 200
+    assert "<form" in r.text
+    assert 'type="file"' in r.text
+
+
+async def test_post_upload_creates_document_row(client, db, tmp_upload_dir):
+    payload_text = "tiny doc body"
+    files = {"file": ("hello.txt", payload_text.encode("utf-8"), "text/plain")}
+    r = await client.post("/upload", files=files)
+    assert r.status_code in (200, 303)
+    with db.cursor() as cur:
+        cur.execute("SELECT id, status, source_type, file_extension FROM documents")
+        row = cur.fetchone()
+        assert row is not None
+        assert row["status"] == "queued"
+        assert row["source_type"] == "web_ui"
+        assert row["file_extension"] == ".txt"
+    files_on_disk = list(tmp_upload_dir.iterdir())
+    assert len(files_on_disk) == 1
+
+
+async def test_post_upload_rejects_oversize(client, monkeypatch):
+    monkeypatch.setenv("VB_MAX_UPLOAD_MB", "0")
+    import importlib, config as _config
+    importlib.reload(_config)
+    huge = b"x" * (1024 * 1024 + 1)
+    files = {"file": ("big.txt", huge, "text/plain")}
+    r = await client.post("/upload", files=files)
+    assert r.status_code == 413
