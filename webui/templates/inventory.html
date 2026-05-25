@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Inventory — OpenBrain{% endblock %}
+{% block content %}
+<div class="toolbar">
+  <div>
+    <h2>Documents</h2>
+    <div style="color: var(--muted); font-size: 12px;">
+      {{ counts.indexed }} indexed · {{ counts.processing }} processing · {{ counts.failed }} failed
+    </div>
+  </div>
+  <div>
+    <a href="/upload" class="btn primary">+ Upload</a>
+  </div>
+</div>
+
+<form class="filters" hx-get="/inventory/rows" hx-target="#rows" hx-trigger="change, submit, keyup delay:300ms from:input[name=search]">
+  <input class="input" type="search" name="search" placeholder="Search title..." value="{{ filters.search }}">
+  <select class="input" name="status">
+    <option value="">All statuses</option>
+    {% for s in ["queued","processing","transcribing","indexed","failed"] %}
+      <option value="{{ s }}" {% if filters.status == s %}selected{% endif %}>{{ s }}</option>
+    {% endfor %}
+  </select>
+  <select class="input" name="source">
+    <option value="">All sources</option>
+    {% for s in ["local_file","web_ui","outlook_email"] %}
+      <option value="{{ s }}" {% if filters.source == s %}selected{% endif %}>{{ s }}</option>
+    {% endfor %}
+  </select>
+</form>
+
+<table>
+  <thead>
+    <tr>
+      <th>Title</th><th>Source</th><th>Type</th><th>Date</th>
+      <th style="text-align:right">Chunks</th><th>Status</th>
+    </tr>
+  </thead>
+  <tbody id="rows" hx-get="/inventory/rows" hx-trigger="every 5s" hx-include="form">
+    {% include "_inventory_rows.html" %}
+  </tbody>
+</table>
+{% endblock %}
