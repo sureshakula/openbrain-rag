@@ -100,3 +100,53 @@ CREATE TABLE IF NOT EXISTS knowledge_base (
 );
 
 CREATE INDEX IF NOT EXISTS idx_knowledge_base_source_type ON knowledge_base(source_type);
+
+-- ─────────────────────────────────────────
+-- WEBUI: DRAFTS
+-- Topic-prompted drafts generated via doc-gen UI (distinct from synthesis_runs)
+-- ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS drafts (
+    id              SERIAL PRIMARY KEY,
+    topic           TEXT NOT NULL,
+    doc_type        TEXT NOT NULL,                -- 'process'|'architecture'|'meeting_summary'|'decision_record'|'adr'|'release_note'
+    body_markdown   TEXT NOT NULL,
+    source_filter   JSONB,
+    status          TEXT NOT NULL DEFAULT 'pending', -- 'pending'|'accepted'|'rejected'|'abandoned'
+    feedback        TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    reviewed_at     TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_drafts_status  ON drafts(status);
+CREATE INDEX IF NOT EXISTS idx_drafts_created ON drafts(created_at DESC);
+
+-- ─────────────────────────────────────────
+-- WEBUI: DRAFT CITATIONS
+-- ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS draft_citations (
+    draft_id        INTEGER NOT NULL REFERENCES drafts(id) ON DELETE CASCADE,
+    chunk_id        INTEGER NOT NULL REFERENCES chunks(id) ON DELETE CASCADE,
+    citation_index  INTEGER NOT NULL,
+    PRIMARY KEY (draft_id, citation_index)
+);
+
+-- ─────────────────────────────────────────
+-- WEBUI: DOCUMENTS EXTENSIONS
+-- ─────────────────────────────────────────
+ALTER TABLE documents
+    ADD COLUMN IF NOT EXISTS failure_reason TEXT,
+    ADD COLUMN IF NOT EXISTS active         BOOLEAN NOT NULL DEFAULT TRUE,
+    ADD COLUMN IF NOT EXISTS file_size      BIGINT,
+    ADD COLUMN IF NOT EXISTS file_extension TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_documents_active ON documents(active);
+
+-- ─────────────────────────────────────────
+-- WEBUI: BM25 SUPPORT
+-- Generated tsvector column on chunks for keyword search (hybrid retrieval)
+-- ─────────────────────────────────────────
+ALTER TABLE chunks
+    ADD COLUMN IF NOT EXISTS content_tsv tsvector
+        GENERATED ALWAYS AS (to_tsvector('english', content)) STORED;
+
+CREATE INDEX IF NOT EXISTS idx_chunks_content_tsv ON chunks USING GIN (content_tsv);
