@@ -5,7 +5,10 @@ from dataclasses import dataclass
 
 import httpx
 
-from config import ANTHROPIC_API_KEY, SYNTHESIS_MODEL, SYNTHESIS_MAX_TOKENS
+from config import (
+    ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, ANTHROPIC_BASE_URL,
+    SYNTHESIS_MODEL, SYNTHESIS_MAX_TOKENS, SYNTHESIS_TIMEOUT_SEC,
+)
 from retrieval.search import Chunk
 
 
@@ -80,12 +83,15 @@ def generate(topic: str, doc_type: str, chunks: list[Chunk]) -> tuple[str, list[
         "messages": [{"role": "user", "content": user_prompt}],
     }
     headers = {
-        "x-api-key": ANTHROPIC_API_KEY,
         "anthropic-version": "2023-06-01",
         "content-type": "application/json",
     }
-    r = httpx.post("https://api.anthropic.com/v1/messages",
-                   json=payload, headers=headers, timeout=120)
+    if ANTHROPIC_AUTH_TOKEN:
+        headers["Authorization"] = f"Bearer {ANTHROPIC_AUTH_TOKEN}"
+    if ANTHROPIC_API_KEY:
+        headers["x-api-key"] = ANTHROPIC_API_KEY
+    url = f"{ANTHROPIC_BASE_URL.rstrip('/')}/v1/messages"
+    r = httpx.post(url, json=payload, headers=headers, timeout=SYNTHESIS_TIMEOUT_SEC)
     r.raise_for_status()
     data = r.json()
     body = "".join(block["text"] for block in data["content"] if block.get("type") == "text")

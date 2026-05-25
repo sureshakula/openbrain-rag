@@ -17,10 +17,13 @@ OLLAMA_BASE_URL     = os.getenv("VB_OLLAMA_URL", "http://localhost:11434")
 EMBEDDING_MODEL     = os.getenv("VB_EMBED_MODEL", "nomic-embed-text")
 EMBEDDING_DIM       = 768
 
-# ── Claude API ────────────────────────────────────────────
-ANTHROPIC_API_KEY   = os.getenv("ANTHROPIC_API_KEY", "")
-SYNTHESIS_MODEL     = "claude-sonnet-4-20250514"
-SYNTHESIS_MAX_TOKENS = 1024
+# ── Claude API (or Anthropic-compatible proxy like z.ai/GLM) ──
+ANTHROPIC_API_KEY      = os.getenv("ANTHROPIC_API_KEY", "")
+ANTHROPIC_AUTH_TOKEN   = os.getenv("ANTHROPIC_AUTH_TOKEN", "")
+ANTHROPIC_BASE_URL     = os.getenv("ANTHROPIC_BASE_URL", "https://api.anthropic.com")
+SYNTHESIS_MODEL        = os.getenv("VB_SYNTHESIS_MODEL", "claude-sonnet-4-20250514")
+SYNTHESIS_MAX_TOKENS   = int(os.getenv("VB_SYNTHESIS_MAX_TOKENS", "1024"))
+SYNTHESIS_TIMEOUT_SEC  = int(os.getenv("VB_SYNTHESIS_TIMEOUT_SEC", "300"))
 
 # ── Chunking ──────────────────────────────────────────────
 CHUNK_SIZE          = 400       # tokens per chunk (approximate, character-based)
