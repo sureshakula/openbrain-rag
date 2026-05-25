@@ -89,3 +89,40 @@ voziq-brain/
 | 4 | Web UI ingestion | Planned |
 | 5 | MCP server (RAG query layer) | Planned |
 | 6 | BookStack write-back | Planned |
+
+## Web UI
+
+### One-time setup
+
+```bash
+docker compose up -d db                   # postgres + pgvector
+./scripts/psql.sh openbrain      -f db/schema.sql
+./scripts/psql.sh openbrain_test -f db/schema.sql
+.venv/bin/pip install -r requirements.txt
+mkdir -p uploads
+```
+
+### Run dev server (local Python)
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+.venv/bin/uvicorn webui.app:app --host 0.0.0.0 --port 8000
+```
+
+Workers start automatically via FastAPI lifespan. Open http://localhost:8000.
+
+### Pages
+
+- `/upload` — upload files (txt, md, pdf, docx, pptx)
+- `/inventory` — live document list with status (polls every 5s)
+- `/docgen` — generate a draft from a topic prompt
+- `/drafts` — review queue with accept / reject / abandon
+- `/health` — JSON health check
+
+### Run tests
+
+```bash
+.venv/bin/pytest -v
+```
+
+(Requires docker-compose Postgres up and the test DB initialized as above.)
