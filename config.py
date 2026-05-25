@@ -28,3 +28,21 @@ CHUNK_OVERLAP       = 80        # overlap between consecutive chunks
 
 # ── Review ────────────────────────────────────────────────
 REVIEW_CHANNEL      = "outlook"  # 'outlook' | 'web_ui'
+
+# ── Webui ─────────────────────────────────────────────────
+WEBUI_HOST          = os.getenv("VB_WEBUI_HOST", "0.0.0.0")
+WEBUI_PORT          = int(os.getenv("VB_WEBUI_PORT", "8000"))
+
+# ── Upload / Worker ───────────────────────────────────────
+UPLOAD_DIR          = os.getenv("VB_UPLOAD_DIR", "./uploads")
+MAX_UPLOAD_MB       = int(os.getenv("VB_MAX_UPLOAD_MB", "500"))
+INGEST_WORKER_COUNT = int(os.getenv("VB_INGEST_WORKER_COUNT", "2"))
+
+# ── Retrieval ─────────────────────────────────────────────
+RETRIEVAL_TOP_K     = int(os.getenv("VB_RETRIEVAL_TOP_K", "12"))
+RETRIEVAL_RRF_K     = int(os.getenv("VB_RETRIEVAL_RRF_K", "60"))  # RRF constant
+
+# ── BookStack ─────────────────────────────────────────────
+BOOKSTACK_STUB      = os.getenv("VB_BOOKSTACK_STUB", "true").lower() == "true"
+BOOKSTACK_URL       = os.getenv("VB_BOOKSTACK_URL", "")
+BOOKSTACK_TOKEN     = os.getenv("VB_BOOKSTACK_TOKEN", "")
