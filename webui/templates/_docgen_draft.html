@@ -1,0 +1,12 @@
+<div class="toolbar">
+  <h3 style="margin: 0;">Draft preview</h3>
+  <a href="/drafts/{{ draft_id }}" class="btn primary">Open in drafts →</a>
+</div>
+<div class="draft-body">{{ body }}</div>
+<div class="sources">
+  <strong>Sources</strong>
+  {% for c in citations %}
+    <div>[{{ c.citation_index }}] {{ c.document_title }}</div>
+  {% endfor %}
+  {% if not citations %}<div style="opacity: 0.6;">No inline citations parsed.</div>{% endif %}
+</div>

@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Doc-gen — OpenBrain{% endblock %}
+{% block content %}
+<div class="toolbar"><h2>Generate draft</h2></div>
+
+<div class="split">
+  <div class="left">
+    <form hx-post="/docgen/generate" hx-target="#draft-preview" hx-swap="innerHTML"
+          hx-indicator="#gen-spinner">
+      <div class="label">Topic</div>
+      <textarea name="topic" required class="input" rows="3" style="width: 100%;"
+                placeholder="e.g. How does our churn prediction model use transcripts?"></textarea>
+
+      <div class="label">Document type</div>
+      <select name="doc_type" class="input" style="width: 100%;">
+        {% for d in doc_types %}<option value="{{ d }}">{{ d }}</option>{% endfor %}
+      </select>
+
+      <div class="label">Source type filter (optional)</div>
+      <input name="source_types" class="input" placeholder="local_file,web_ui" style="width: 100%;">
+
+      <div class="label">File extension filter (optional)</div>
+      <input name="file_extensions" class="input" placeholder=".pdf,.md" style="width: 100%;">
+
+      <div style="margin-top: 14px;">
+        <button type="submit" class="btn primary" style="width: 100%;">Generate draft</button>
+        <div id="gen-spinner" class="htmx-indicator"
+             style="color: var(--muted); text-align: center; margin-top: 6px;">Generating…</div>
+      </div>
+    </form>
+  </div>
+
+  <div class="right">
+    <div id="draft-preview">
+      <div style="color: var(--muted); text-align: center; padding: 40px 0;">
+        Submit the form to generate a draft.
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
