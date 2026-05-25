@@ -16,3 +16,33 @@ services:
       interval: 3s
       timeout: 3s
       retries: 20
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      VB_DB_HOST: db
+      VB_DB_PORT: 5432
+      VB_DB_NAME: ${VB_DB_NAME:-openbrain}
+      VB_DB_USER: ${VB_DB_USER:-postgres}
+      VB_DB_PASSWORD: ${VB_DB_PASSWORD:-postgres}
+      VB_OLLAMA_URL: ${VB_OLLAMA_URL:-http://host.docker.internal:11434}
+      VB_UPLOAD_DIR: /data/uploads
+      VB_MAX_UPLOAD_MB: ${VB_MAX_UPLOAD_MB:-500}
+      VB_INGEST_WORKER_COUNT: ${VB_INGEST_WORKER_COUNT:-2}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - ./uploads:/data/uploads
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: >
+      sh -c "
+      until pg_isready -h db -U $${VB_DB_USER} -d $${VB_DB_NAME} -q; do sleep 1; done;
+      PGPASSWORD=$${VB_DB_PASSWORD} psql -h db -U $${VB_DB_USER} -d $${VB_DB_NAME} -f /app/db/schema.sql;
+      exec uvicorn webui.app:app --host 0.0.0.0 --port 8000 --reload
+      "

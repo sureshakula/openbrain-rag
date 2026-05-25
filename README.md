@@ -126,3 +126,29 @@ Workers start automatically via FastAPI lifespan. Open http://localhost:8000.
 ```
 
 (Requires docker-compose Postgres up and the test DB initialized as above.)
+
+## Docker Compose
+
+```bash
+cp .env.example .env       # optional — defaults work for local dev
+env DOCKER_CONFIG=/tmp/docker-noauth docker compose up --build
+```
+
+(The `DOCKER_CONFIG` workaround is only needed if Docker Desktop's keychain is locked; on a fresh machine you can omit it.)
+
+This brings up:
+- `db` — Postgres 16 + pgvector on host port 5432, data persisted in `./pgdata/`
+- `app` — FastAPI webui on http://localhost:8000, source bind-mounted from `./` for hot reload, uploads in `./uploads/`
+
+Ollama is **not** in compose. Run it on the host:
+```bash
+ollama serve
+ollama pull nomic-embed-text
+```
+The app reaches it via `host.docker.internal:11434` (override with `VB_OLLAMA_URL`).
+
+Stop:
+```bash
+docker compose down       # keep data
+rm -rf pgdata uploads     # also wipe data
+```
