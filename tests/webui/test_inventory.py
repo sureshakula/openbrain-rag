@@ -10,14 +10,14 @@ async def client():
         yield c
 
 
-def _seed_doc(db, *, title, status, src="local_file", ext=".txt"):
+def _seed_doc(db, *, title, status, src="local_file", ext=".txt", namespace="general"):
     with db.cursor() as cur:
         cur.execute(
             """INSERT INTO documents
                (source_type, source_ref, title, content_hash, raw_content,
-                status, file_extension, active)
-               VALUES (%s, %s, %s, %s, '', %s, %s, TRUE) RETURNING id""",
-            (src, f"/fake/{title}", title, f"hash-{title}", status, ext),
+                status, file_extension, namespace, active)
+               VALUES (%s, %s, %s, %s, '', %s, %s, %s, TRUE) RETURNING id""",
+            (src, f"/fake/{title}", title, f"hash-{title}", status, ext, namespace),
         )
         return cur.fetchone()["id"]
 
@@ -47,3 +47,20 @@ async def test_inventory_filter_by_status(client, db):
     r = await client.get("/inventory/rows?status=failed")
     assert "fail1" in r.text
     assert "ind1" not in r.text
+
+
+async def test_inventory_filter_by_namespace(client, db):
+    _seed_doc(db, title="ns-code", status="indexed", namespace="code")
+    _seed_doc(db, title="ns-gen", status="indexed", namespace="general")
+    db.commit()
+    r = await client.get("/inventory/rows?namespace=code")
+    assert "ns-code" in r.text
+    assert "ns-gen" not in r.text
+
+
+async def test_inventory_page_shows_namespace_dropdown(client, db):
+    _seed_doc(db, title="d1", status="indexed", namespace="operations")
+    db.commit()
+    r = await client.get("/inventory")
+    assert "All namespaces" in r.text
+    assert "operations" in r.text

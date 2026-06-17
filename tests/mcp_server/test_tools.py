@@ -19,15 +19,15 @@ def _mock_embed(monkeypatch, vec: list[float]):
 
 def _seed_doc(db, title: str, content: str, embedding: list[float],
               src: str = "local_file", ext: str = ".txt",
-              status: str = "indexed") -> int:
+              status: str = "indexed", namespace: str = "general") -> int:
     with db.cursor() as cur:
         cur.execute(
             """INSERT INTO documents
                (source_type, source_ref, title, content_hash, raw_content,
-                status, file_extension, file_size, active)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, TRUE) RETURNING id""",
+                status, file_extension, file_size, namespace, active)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE) RETURNING id""",
             (src, f"/fake/{title}", title, f"h-{title}", content,
-             status, ext, len(content)),
+             status, ext, len(content), namespace),
         )
         doc_id = cur.fetchone()["id"]
         cur.execute(
@@ -62,11 +62,23 @@ def test_tool_search_respects_source_filter(db, monkeypatch):
     assert all(r["source_type"] == "web_ui" for r in out)
 
 
+def test_tool_search_respects_namespace_filter(db, monkeypatch):
+    _mock_embed(monkeypatch, [0.1] * 768)
+    _seed_doc(db, "code-doc", "churn", [0.1] * 768, namespace="code")
+    _seed_doc(db, "ops-doc",  "churn", [0.1] * 768, namespace="operations")
+
+    out = t_search("churn", namespaces=["code"], top_k=5)
+    titles = [r["document_title"] for r in out]
+    assert "code-doc" in titles
+    assert "ops-doc" not in titles
+
+
 def test_tool_fetch_document_returns_full_doc(db):
-    doc_id = _seed_doc(db, "fetched", "full body here", [0.1] * 768)
+    doc_id = _seed_doc(db, "fetched", "full body here", [0.1] * 768, namespace="code")
     out = t_fetch(doc_id)
     assert out["id"] == doc_id
     assert out["title"] == "fetched"
+    assert out["namespace"] == "code"
     assert out["raw_content"] == "full body here"
     assert out["chunk_count"] >= 1
     # ingested_at must serialize to ISO string (not datetime)
@@ -92,6 +104,17 @@ def test_tool_list_documents_filters(db):
 
     only_web = t_list(source="web_ui")
     assert all(r["source_type"] == "web_ui" for r in only_web)
+
+
+def test_tool_list_documents_namespace_filter(db):
+    _seed_doc(db, "n-code", "x", [0.1] * 768, namespace="code")
+    _seed_doc(db, "n-gen",  "y", [0.1] * 768, namespace="general")
+
+    rows = t_list(namespace="code")
+    titles = {r["title"] for r in rows}
+    assert "n-code" in titles
+    assert "n-gen" not in titles
+    assert all(r["namespace"] == "code" for r in rows)
 
 
 def test_tool_list_documents_limit(db):

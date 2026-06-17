@@ -2,6 +2,7 @@
 <tr>
   <td>{{ row.title }}</td>
   <td style="color: var(--muted)">{{ row.source_type }}</td>
+  <td style="color: var(--muted)">{{ row.namespace }}</td>
   <td style="color: var(--muted)">{{ row.file_extension or "" }}</td>
   <td style="color: var(--muted)">{{ row.ingested_at.strftime('%Y-%m-%d') if row.ingested_at else '' }}</td>
   <td style="text-align:right">{{ row.chunk_count or '—' }}</td>
@@ -14,5 +15,5 @@
 </tr>
 {% endfor %}
 {% if not rows %}
-<tr><td colspan="6" style="color: var(--muted); padding: 24px; text-align: center;">No documents.</td></tr>
+<tr><td colspan="7" style="color: var(--muted); padding: 24px; text-align: center;">No documents.</td></tr>
 {% endif %}

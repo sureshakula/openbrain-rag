@@ -10,6 +10,7 @@ Usage:
     python ingestion/ingest_local.py --folder /path/to/docs
     python ingestion/ingest_local.py --folder /path/to/docs --dry-run
     python ingestion/ingest_local.py --file /path/to/one/file.md
+    python ingestion/ingest_local.py --folder /path/to/docs --namespace code
 """
 
 import argparse
@@ -113,7 +114,7 @@ def ingest_file(conn, path: Path, dry_run: bool = False,
         time.sleep(0.05)  # don't hammer Ollama
     print(f"    Embedded {sum(1 for e in embeddings if e)}/{len(chunks)} chunks")
 
-    doc_id = insert_document(conn, path, content, content_hash)
+    doc_id = insert_document(conn, path, content, content_hash, namespace=namespace)
     insert_chunks(conn, doc_id, chunks, embeddings)
     mark_chunked(conn, doc_id)
 
@@ -121,7 +122,8 @@ def ingest_file(conn, path: Path, dry_run: bool = False,
     return True
 
 
-def ingest_folder(folder: Path, dry_run: bool = False):
+def ingest_folder(folder: Path, dry_run: bool = False,
+                  namespace: str = DEFAULT_NAMESPACE):
     files = sorted(
         f for f in folder.rglob("*")
         if f.is_file() and f.suffix.lower() in SUPPORTED_EXTENSIONS
@@ -138,7 +140,7 @@ def ingest_folder(folder: Path, dry_run: bool = False):
     with get_conn() as conn:
         for path in files:
             try:
-                result = ingest_file(conn, path, dry_run=dry_run)
+                result = ingest_file(conn, path, dry_run=dry_run, namespace=namespace)
                 if result:
                     processed += 1
                 else:
@@ -159,10 +161,13 @@ if __name__ == "__main__":
     group.add_argument("--folder", type=Path, help="Ingest all files in a folder (recursive)")
     group.add_argument("--file",   type=Path, help="Ingest a single file")
     parser.add_argument("--dry-run", action="store_true", help="No DB writes")
+    parser.add_argument("--namespace", default=DEFAULT_NAMESPACE,
+                        help=f"Namespace tag for ingested docs (default: {DEFAULT_NAMESPACE})")
     args = parser.parse_args()
+    namespace = (args.namespace or DEFAULT_NAMESPACE).strip().lower()
 
     if args.file:
         with get_conn() as conn:
-            ingest_file(conn, args.file, dry_run=args.dry_run)
+            ingest_file(conn, args.file, dry_run=args.dry_run, namespace=namespace)
     else:
-        ingest_folder(args.folder, dry_run=args.dry_run)
+        ingest_folder(args.folder, dry_run=args.dry_run, namespace=namespace)

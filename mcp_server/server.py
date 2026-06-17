@@ -4,9 +4,9 @@ Exposes the RAG knowledge base over the Model Context Protocol via
 Streamable HTTP transport on port 8001 (multi-client, long-lived).
 
 Tools:
-    search(query, source_types?, file_extensions?, top_k?) — hybrid retrieval
+    search(query, source_types?, file_extensions?, namespaces?, top_k?) — hybrid retrieval
     fetch_document(document_id) — full content + metadata
-    list_documents(status?, source?, limit?) — inventory listing
+    list_documents(status?, source?, namespace?, limit?) — inventory listing
 
 Run:
     uvicorn mcp_server.server:app --host 0.0.0.0 --port 8001
@@ -45,6 +45,7 @@ def search(
     query: str,
     source_types: list[str] | None = None,
     file_extensions: list[str] | None = None,
+    namespaces: list[str] | None = None,
     top_k: int = 12,
 ) -> list[dict]:
     """Hybrid pgvector ANN + tsvector BM25 retrieval, RRF-merged.
@@ -53,6 +54,7 @@ def search(
         query: Natural-language query.
         source_types: Filter to ['local_file','web_ui','outlook_email']. None = all.
         file_extensions: Filter to ['.pdf','.md','.docx', ...]. None = all.
+        namespaces: Filter to one or more namespaces (e.g. ['code','operations']). None = all.
         top_k: Number of chunks to return (default 12).
 
     Returns: list of {chunk_id, document_id, document_title, source_type,
@@ -61,6 +63,7 @@ def search(
     filters = SearchFilters(
         source_types=source_types or [],
         file_extensions=file_extensions or [],
+        namespaces=namespaces or [],
     )
     results = do_search(query, filters=filters, top_k=top_k)
     return [
@@ -93,7 +96,7 @@ def fetch_document(document_id: int) -> dict:
             cur.execute(
                 """
                 SELECT d.id, d.title, d.source_type, d.source_ref, d.ingested_at,
-                       d.status, d.file_extension, d.file_size, d.raw_content,
+                       d.status, d.file_extension, d.file_size, d.namespace, d.raw_content,
                        (SELECT COUNT(*) FROM chunks c WHERE c.document_id = d.id) AS chunk_count
                   FROM documents d
                  WHERE d.id = %s AND d.active = TRUE
@@ -113,6 +116,7 @@ def fetch_document(document_id: int) -> dict:
 def list_documents(
     status: str | None = None,
     source: str | None = None,
+    namespace: str | None = None,
     limit: int = 50,
 ) -> list[dict]:
     """List indexed documents (newest first).
@@ -120,10 +124,11 @@ def list_documents(
     Args:
         status: Filter by status ('indexed','queued','processing','failed'). None = all.
         source: Filter by source_type ('local_file','web_ui','outlook_email'). None = all.
+        namespace: Filter by namespace (e.g. 'code','operations'). None = all.
         limit: Max rows (default 50).
 
     Returns: list of {id, title, source_type, file_extension, status,
-                      file_size, chunk_count, ingested_at}.
+                      file_size, namespace, chunk_count, ingested_at}.
     """
     where: list[str] = ["active = TRUE"]
     args: list = []
@@ -133,9 +138,12 @@ def list_documents(
     if source:
         where.append("source_type = %s")
         args.append(source)
+    if namespace:
+        where.append("namespace = %s")
+        args.append(namespace)
     sql = f"""
         SELECT d.id, d.title, d.source_type, d.file_extension, d.status,
-               d.file_size, d.ingested_at,
+               d.file_size, d.namespace, d.ingested_at,
                (SELECT COUNT(*) FROM chunks c WHERE c.document_id = d.id) AS chunk_count
           FROM documents d
          WHERE {' AND '.join(where)}

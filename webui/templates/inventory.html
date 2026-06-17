@@ -27,12 +27,18 @@
       <option value="{{ s }}" {% if filters.source == s %}selected{% endif %}>{{ s }}</option>
     {% endfor %}
   </select>
+  <select class="input" name="namespace">
+    <option value="">All namespaces</option>
+    {% for ns in namespaces %}
+      <option value="{{ ns }}" {% if filters.namespace == ns %}selected{% endif %}>{{ ns }}</option>
+    {% endfor %}
+  </select>
 </form>
 
 <table>
   <thead>
     <tr>
-      <th>Title</th><th>Source</th><th>Type</th><th>Date</th>
+      <th>Title</th><th>Source</th><th>Namespace</th><th>Type</th><th>Date</th>
       <th style="text-align:right">Chunks</th><th>Status</th>
     </tr>
   </thead>

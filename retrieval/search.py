@@ -11,6 +11,7 @@ from ingestion.core import embed
 class SearchFilters:
     source_types: list[str] = field(default_factory=list)
     file_extensions: list[str] = field(default_factory=list)
+    namespaces: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -31,6 +32,8 @@ def _build_where(filters: SearchFilters | None) -> tuple[str, list]:
         clauses.append("d.source_type = ANY(%s)"); args.append(filters.source_types)
     if filters and filters.file_extensions:
         clauses.append("d.file_extension = ANY(%s)"); args.append(filters.file_extensions)
+    if filters and filters.namespaces:
+        clauses.append("d.namespace = ANY(%s)"); args.append(filters.namespaces)
     return " AND ".join(clauses), args
 
 

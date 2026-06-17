@@ -10,7 +10,7 @@ router = APIRouter()
 
 
 def _query_docs(*, status: str | None, source: str | None, ftype: str | None,
-                search: str | None, limit: int = 200) -> list[dict]:
+                namespace: str | None, search: str | None, limit: int = 200) -> list[dict]:
     where: list[str] = ["active = TRUE"]
     args: list = []
     if status:
@@ -19,11 +19,13 @@ def _query_docs(*, status: str | None, source: str | None, ftype: str | None,
         where.append("source_type = %s"); args.append(source)
     if ftype:
         where.append("file_extension = %s"); args.append(ftype)
+    if namespace:
+        where.append("namespace = %s"); args.append(namespace)
     if search:
         where.append("title ILIKE %s"); args.append(f"%{search}%")
     sql = f"""
         SELECT d.id, d.title, d.source_type, d.file_extension, d.status,
-               d.failure_reason, d.ingested_at,
+               d.namespace, d.failure_reason, d.ingested_at,
                (SELECT COUNT(*) FROM chunks c WHERE c.document_id = d.id) AS chunk_count
           FROM documents d
          WHERE {' AND '.join(where)}
@@ -35,6 +37,17 @@ def _query_docs(*, status: str | None, source: str | None, ftype: str | None,
             cur.execute(sql, args)
             cols = [c.name for c in cur.description]
             return [dict(zip(cols, row)) for row in cur.fetchall()]
+
+
+def _namespaces() -> list[str]:
+    """Distinct namespaces in use, for the inventory filter dropdown."""
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT DISTINCT namespace FROM documents "
+                "WHERE active = TRUE AND namespace IS NOT NULL ORDER BY namespace"
+            )
+            return [row[0] for row in cur.fetchall()]
 
 
 def _counts() -> dict:
@@ -57,14 +70,18 @@ async def inventory(request: Request,
                     status: str | None = None,
                     source: str | None = None,
                     ftype: str | None = None,
+                    namespace: str | None = None,
                     search: str | None = None):
     return render(
         request, "inventory.html",
         {"page": "inventory",
-         "rows": _query_docs(status=status, source=source, ftype=ftype, search=search),
+         "rows": _query_docs(status=status, source=source, ftype=ftype,
+                             namespace=namespace, search=search),
          "counts": _counts(),
+         "namespaces": _namespaces(),
          "filters": {"status": status or "", "source": source or "",
-                     "ftype": ftype or "", "search": search or ""}},
+                     "ftype": ftype or "", "namespace": namespace or "",
+                     "search": search or ""}},
     )
 
 
@@ -73,8 +90,10 @@ async def inventory_rows(request: Request,
                          status: str | None = None,
                          source: str | None = None,
                          ftype: str | None = None,
+                         namespace: str | None = None,
                          search: str | None = None):
     return render(
         request, "_inventory_rows.html",
-        {"rows": _query_docs(status=status, source=source, ftype=ftype, search=search)},
+        {"rows": _query_docs(status=status, source=source, ftype=ftype,
+                             namespace=namespace, search=search)},
     )
