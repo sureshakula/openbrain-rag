@@ -16,11 +16,30 @@ def _force_test_db_env():
     os.environ["VB_DB_USER"] = os.getenv("VB_DB_USER", "postgres")
     os.environ["VB_DB_PASSWORD"] = os.getenv("VB_DB_PASSWORD", "postgres")
     os.environ["VB_DB_NAME"] = os.getenv("VB_DB_NAME", "openbrain_test")
+    # Neutralize Anthropic settings so synthesis tests mock the default endpoint
+    # regardless of a real ANTHROPIC_BASE_URL / token in the runtime .env.
+    os.environ["ANTHROPIC_BASE_URL"] = "https://api.anthropic.com"
+    os.environ["ANTHROPIC_AUTH_TOKEN"] = ""
+    os.environ["ANTHROPIC_API_KEY"] = "test"
     # Reload config so module-level constants pick up the env
     import importlib, config
     importlib.reload(config)
     import db.connection
     importlib.reload(db.connection)
+    yield
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _ensure_test_schema(_force_test_db_env, db_dsn):
+    """Apply db/schema.sql to the test DB so tables exist no matter how the
+    database was provisioned (fresh volume, host postgres, etc). schema.sql is
+    idempotent (CREATE ... IF NOT EXISTS / ADD COLUMN IF NOT EXISTS)."""
+    schema_path = Path(__file__).resolve().parent.parent / "db" / "schema.sql"
+    conn = psycopg2.connect(db_dsn)
+    conn.autocommit = True
+    with conn.cursor() as cur:
+        cur.execute(schema_path.read_text())
+    conn.close()
     yield
 
 

@@ -5,10 +5,7 @@ from dataclasses import dataclass
 
 import httpx
 
-from config import (
-    ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, ANTHROPIC_BASE_URL,
-    SYNTHESIS_MODEL, SYNTHESIS_MAX_TOKENS, SYNTHESIS_TIMEOUT_SEC,
-)
+import config  # read settings dynamically at call time so env/reload changes take effect
 from retrieval.search import Chunk
 
 
@@ -77,8 +74,8 @@ def generate(topic: str, doc_type: str, chunks: list[Chunk]) -> tuple[str, list[
         doc_type = "process"
     user_prompt = _build_user_prompt(topic, doc_type, chunks)
     payload = {
-        "model": SYNTHESIS_MODEL,
-        "max_tokens": SYNTHESIS_MAX_TOKENS,
+        "model": config.SYNTHESIS_MODEL,
+        "max_tokens": config.SYNTHESIS_MAX_TOKENS,
         "system": SYSTEM_PROMPT,
         "messages": [{"role": "user", "content": user_prompt}],
     }
@@ -86,12 +83,12 @@ def generate(topic: str, doc_type: str, chunks: list[Chunk]) -> tuple[str, list[
         "anthropic-version": "2023-06-01",
         "content-type": "application/json",
     }
-    if ANTHROPIC_AUTH_TOKEN:
-        headers["Authorization"] = f"Bearer {ANTHROPIC_AUTH_TOKEN}"
-    if ANTHROPIC_API_KEY:
-        headers["x-api-key"] = ANTHROPIC_API_KEY
-    url = f"{ANTHROPIC_BASE_URL.rstrip('/')}/v1/messages"
-    r = httpx.post(url, json=payload, headers=headers, timeout=SYNTHESIS_TIMEOUT_SEC)
+    if config.ANTHROPIC_AUTH_TOKEN:
+        headers["Authorization"] = f"Bearer {config.ANTHROPIC_AUTH_TOKEN}"
+    if config.ANTHROPIC_API_KEY:
+        headers["x-api-key"] = config.ANTHROPIC_API_KEY
+    url = f"{config.ANTHROPIC_BASE_URL.rstrip('/')}/v1/messages"
+    r = httpx.post(url, json=payload, headers=headers, timeout=config.SYNTHESIS_TIMEOUT_SEC)
     r.raise_for_status()
     data = r.json()
     body = "".join(block["text"] for block in data["content"] if block.get("type") == "text")
