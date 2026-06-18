@@ -51,11 +51,25 @@ Drop files into `./watch/` and they auto-ingest within ~2s (debounce + sha256 de
 
 Same supported types as `/upload` (txt/md/rst/py/sql/csv/pdf/docx/pptx; mp4 marks failed).
 
-Disable by setting `VB_WATCH_DIR=` (empty).
+Watched files land in the space named by `VB_WATCH_SPACE` (default `Common`); subfolders no longer derive a namespace. Disable the watcher by setting `VB_WATCH_DIR=` (empty).
 
 ```bash
 echo "# my note" > watch/note.md     # → indexed within ~5s
 ```
+
+## Multi-user spaces
+
+Documents live in **spaces**. Isolation is honor-system for a trusted LAN — not a hardened security boundary.
+
+- **Login:** lightweight username, no password. Visit any page → redirected to `/login`, pick a username (first-seen names auto-register). Identity is held in the `ob_user` cookie.
+- **Common:** a built-in shared space every user auto-joins. Folder-watcher and CLI ingestion land here by default, as do all pre-existing documents (their old namespace is preserved in `metadata.namespace_legacy`).
+- **Personal space:** each user gets a private space only they can see.
+- **Shared spaces:** create or join named shared spaces at `/spaces`. A document belongs to exactly one space.
+- Inventory, doc-gen retrieval, and MCP are all scoped to the spaces you can access.
+
+**MCP access:** the server authenticates by per-user token. Send `Authorization: Bearer <mcp_token>` (a user's token from the `users` table). `search` / `list_documents` accept an optional `spaces` / `space` name to narrow within accessible spaces; `fetch_document` blocks cross-space reads.
+
+**CLI:** `python ingestion/ingest_local.py --folder ./docs --space Engineering --user alice` (defaults: `--space Common`, no user). Shared spaces must already exist.
 
 ## Reset
 
