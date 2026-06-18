@@ -54,7 +54,8 @@ def db(db_dsn):
     conn = psycopg2.connect(db_dsn, cursor_factory=RealDictCursor)
     with conn.cursor() as cur:
         cur.execute("""
-            TRUNCATE draft_citations, drafts, review_queue, synthesis_runs,
+            TRUNCATE message_citations, messages, conversations,
+                     draft_citations, drafts, review_queue, synthesis_runs,
                      knowledge_base, chunks, documents,
                      space_members, spaces, users RESTART IDENTITY CASCADE;
         """)

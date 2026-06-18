@@ -213,3 +213,31 @@ ALTER TABLE documents ALTER COLUMN space_id SET NOT NULL;
 DROP INDEX IF EXISTS idx_documents_namespace;
 ALTER TABLE documents DROP COLUMN IF EXISTS namespace;
 CREATE INDEX IF NOT EXISTS idx_documents_space ON documents(space_id);
+
+-- ─────────────────────────────────────────
+-- CHAT
+-- ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS conversations (
+    id          SERIAL PRIMARY KEY,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title       TEXT NOT NULL DEFAULT 'New chat',
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_conversations_user ON conversations(user_id);
+
+CREATE TABLE IF NOT EXISTS messages (
+    id               SERIAL PRIMARY KEY,
+    conversation_id  INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    role             TEXT NOT NULL CHECK (role IN ('user','assistant')),
+    content          TEXT NOT NULL,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);
+
+CREATE TABLE IF NOT EXISTS message_citations (
+    message_id      INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    chunk_id        INTEGER NOT NULL REFERENCES chunks(id) ON DELETE CASCADE,
+    citation_index  INTEGER NOT NULL,
+    PRIMARY KEY (message_id, chunk_id)
+);
