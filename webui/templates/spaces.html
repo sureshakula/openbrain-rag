@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Spaces — OpenBrain{% endblock %}
+{% block content %}
+<div class="toolbar"><h2>Spaces</h2></div>
+{% if error %}<p style="color: var(--danger, #c00)">{{ error }}</p>{% endif %}
+<table>
+  <thead><tr><th>Name</th><th>Kind</th><th>Role</th><th style="text-align:right">Docs</th></tr></thead>
+  <tbody>
+    {% for s in spaces %}
+    <tr><td>{{ s.name }}</td><td style="color: var(--muted)">{{ s.kind }}</td>
+        <td style="color: var(--muted)">{{ s.role }}</td>
+        <td style="text-align:right">{{ s.doc_count }}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+<div class="toolbar" style="margin-top:24px"><h3>Create shared space</h3></div>
+<form method="post" action="/spaces/create" class="filters">
+  <input class="input" type="text" name="name" placeholder="new space name" required>
+  <button class="btn primary" type="submit">Create</button>
+</form>
+<div class="toolbar" style="margin-top:16px"><h3>Join shared space</h3></div>
+<form method="post" action="/spaces/join" class="filters">
+  <input class="input" type="text" name="name" placeholder="existing space name" required>
+  <button class="btn" type="submit">Join</button>
+</form>
+{% endblock %}

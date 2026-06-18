@@ -79,12 +79,13 @@ def create_app(*, start_workers: bool = True) -> FastAPI:
     async def health():
         return {"status": "ok"}
 
-    from webui.routes import auth, upload, inventory, docgen, drafts
+    from webui.routes import auth, upload, inventory, docgen, drafts, spaces
     app.include_router(auth.router)
     app.include_router(upload.router)
     app.include_router(inventory.router)
     app.include_router(docgen.router)
     app.include_router(drafts.router)
+    app.include_router(spaces.router)
 
     return app
 
