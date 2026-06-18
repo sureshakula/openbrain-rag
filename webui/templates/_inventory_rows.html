@@ -2,7 +2,7 @@
 <tr>
   <td>{{ row.title }}</td>
   <td style="color: var(--muted)">{{ row.source_type }}</td>
-  <td style="color: var(--muted)">{{ row.namespace }}</td>
+  <td style="color: var(--muted)">{{ row.space_name }}</td>
   <td style="color: var(--muted)">{{ row.file_extension or "" }}</td>
   <td style="color: var(--muted)">{{ row.ingested_at.strftime('%Y-%m-%d') if row.ingested_at else '' }}</td>
   <td style="text-align:right">{{ row.chunk_count or '—' }}</td>
