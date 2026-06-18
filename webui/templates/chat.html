@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Chat — OpenBrain{% endblock %}
+{% block content %}
+<div class="toolbar">
+  <h2>Chat</h2>
+  <form method="post" action="/chat/new"><button class="btn primary" type="submit">+ New chat</button></form>
+</div>
+<div style="display:flex; gap:16px;">
+  <div style="width:220px; flex:none;">
+    {% for c in conversations %}
+      <div><a href="/chat/{{ c.id }}" {% if c.id == active %}style="font-weight:600"{% endif %}>{{ c.title }}</a></div>
+    {% endfor %}
+  </div>
+  <div style="flex:1;">
+    {% if active %}
+      <div id="messages">
+        {% include "_chat_messages.html" %}
+      </div>
+      <form hx-post="/chat/{{ active }}/message" hx-target="#messages" hx-swap="beforeend"
+            hx-on::after-request="this.reset()" class="filters" style="margin-top:12px;">
+        <input class="input" type="text" name="question" placeholder="Ask the knowledge base..." autofocus required style="flex:1;">
+        <button class="btn primary" type="submit">Send</button>
+      </form>
+    {% else %}
+      <p style="color: var(--muted);">Start a new chat or pick one on the left.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

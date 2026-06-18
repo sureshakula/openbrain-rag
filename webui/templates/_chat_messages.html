@@ -1,0 +1,11 @@
+{% for m in messages %}
+<div class="chat-msg {{ m.role }}">
+  <div class="chat-role">{{ m.role }}</div>
+  <div class="chat-content">{{ m.content }}</div>
+  {% if m.citations %}
+  <div class="chat-cites" style="color: var(--muted); font-size: 12px; margin-top: 4px;">
+    {% for c in m.citations %}<span>[{{ c.citation_index }}] {{ c.title }}</span>{% if not loop.last %} · {% endif %}{% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endfor %}
