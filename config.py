@@ -44,6 +44,7 @@ INGEST_WORKER_COUNT = int(os.getenv("VB_INGEST_WORKER_COUNT", "2"))
 # ── Folder Watcher (empty = disabled) ─────────────────────
 WATCH_DIR           = os.getenv("VB_WATCH_DIR", "")
 WATCH_DEBOUNCE_SEC  = int(os.getenv("VB_WATCH_DEBOUNCE_SEC", "2"))
+WATCH_SPACE         = os.getenv("VB_WATCH_SPACE", "Common")
 
 # ── Retrieval ─────────────────────────────────────────────
 RETRIEVAL_TOP_K     = int(os.getenv("VB_RETRIEVAL_TOP_K", "12"))

@@ -18,6 +18,8 @@ from pathlib import Path
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
+import config
+from accounts.core import ensure_common_space, space_by_name
 from db.connection import get_conn
 from ingestion.core import (
     DEFAULT_NAMESPACE, document_exists, insert_document, sha256_text,
@@ -113,34 +115,35 @@ class FolderWatcher:
         finally:
             self._inflight.discard(key)
 
-    def _namespace_for(self, path: Path) -> str:
-        """Derive namespace from path's first subfolder under watch_dir.
+    @staticmethod
+    def _resolve_space_id(conn) -> int:
+        """Return the space_id for config.WATCH_SPACE.
 
-        watch_dir/foo.md           → 'general'
-        watch_dir/code/foo.py      → 'code'
-        watch_dir/sales/q3/x.pdf   → 'sales' (only first segment)
+        - If WATCH_SPACE (case-insensitive) is "common", use ensure_common_space.
+        - Otherwise look up by name; fall back to Common on miss (with a warning).
         """
-        try:
-            rel = path.relative_to(self.watch_dir)
-        except ValueError:
-            return DEFAULT_NAMESPACE
-        parts = rel.parts
-        if len(parts) <= 1:
-            return DEFAULT_NAMESPACE
-        return parts[0].strip().lower() or DEFAULT_NAMESPACE
+        watch_space = (config.WATCH_SPACE or "").strip()
+        if watch_space.lower() == "common":
+            return ensure_common_space(conn)
+        space = space_by_name(conn, watch_space)
+        if space is None:
+            log.warning(
+                "VB_WATCH_SPACE=%r not found; falling back to Common space", watch_space
+            )
+            return ensure_common_space(conn)
+        return space["id"]
 
     async def _maybe_enqueue(self, path: Path) -> None:
         loop = asyncio.get_running_loop()
-        ns = self._namespace_for(path)
         doc_id = await loop.run_in_executor(
-            None, self._sync_check_and_insert, path, ns
+            None, self._sync_check_and_insert, path
         )
         if doc_id is not None:
             await self.queue.enqueue(doc_id, path)
-            log.info("watcher enqueued %s as doc %d (ns=%s)", path.name, doc_id, ns)
+            log.info("watcher enqueued %s as doc %d", path.name, doc_id)
 
     @staticmethod
-    def _sync_check_and_insert(path: Path, namespace: str) -> int | None:
+    def _sync_check_and_insert(path: Path) -> int | None:
         try:
             data = path.read_bytes()
         except OSError as e:
@@ -150,6 +153,7 @@ class FolderWatcher:
         with get_conn() as conn:
             if document_exists(conn, content_hash) is not None:
                 return None
+            space_id = FolderWatcher._resolve_space_id(conn)
             return insert_document(
                 conn,
                 source_type="local_file",
@@ -160,6 +164,7 @@ class FolderWatcher:
                 file_size=len(data),
                 file_extension=path.suffix.lower(),
                 status="queued",
-                namespace=namespace,
-                metadata={"watcher": True, "namespace": namespace},
+                space_id=space_id,
+                created_by=None,
+                metadata={"watcher": True},
             )
