@@ -17,6 +17,7 @@ async def client(tmp_path, monkeypatch):
     app = create_app(start_workers=True)
     async with app.router.lifespan_context(app):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            c.cookies.set("ob_user", "smoke")
             yield c
 
 

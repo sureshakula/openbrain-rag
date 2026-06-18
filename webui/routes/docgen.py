@@ -3,13 +3,15 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Form, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from psycopg2.extras import Json
 
 from db.connection import get_conn
+from accounts.core import accessible_space_ids
 from retrieval.search import search, SearchFilters
 from synthesis.generate import generate, DOC_TYPES
 from webui.app import render
+from webui.routes.auth import current_user
 
 router = APIRouter()
 
@@ -30,9 +32,15 @@ async def docgen_generate(
     source_types: Annotated[str, Form()] = "",
     file_extensions: Annotated[str, Form()] = "",
 ):
+    user = current_user(request)
+    if user is None:
+        return RedirectResponse(url="/login", status_code=307)
+    with get_conn() as conn:
+        space_ids = accessible_space_ids(conn, user["id"])
     filters = SearchFilters(
         source_types=[s for s in source_types.split(",") if s],
         file_extensions=[e for e in file_extensions.split(",") if e],
+        space_ids=space_ids,
     )
     chunks = search(topic, filters=filters)
     body, citations = generate(topic, doc_type, chunks)

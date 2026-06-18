@@ -4,23 +4,26 @@ import httpx
 from httpx import AsyncClient, ASGITransport
 
 from webui.app import create_app
+from accounts.core import ensure_common_space
 
 
 @pytest.fixture
 async def client():
     app = create_app(start_workers=False)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        c.cookies.set("ob_user", "dg")
         yield c
 
 
 def _seed_chunk(db, title: str, content: str, embedding: list[float] | None = None):
     emb = embedding if embedding is not None else [0.1] * 768
+    space_id = ensure_common_space(db)
     with db.cursor() as cur:
         cur.execute(
             """INSERT INTO documents (source_type, source_ref, title, content_hash, raw_content,
-                                       status, file_extension, active)
-               VALUES ('local_file', %s, %s, %s, '', 'indexed', '.md', TRUE) RETURNING id""",
-            (f"/fake/{title}", title, f"h-{title}"),
+                                       status, file_extension, space_id, active)
+               VALUES ('local_file', %s, %s, %s, '', 'indexed', '.md', %s, TRUE) RETURNING id""",
+            (f"/fake/{title}", title, f"h-{title}", space_id),
         )
         doc_id = cur.fetchone()["id"]
         cur.execute(

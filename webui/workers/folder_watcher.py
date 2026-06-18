@@ -22,7 +22,7 @@ import config
 from accounts.core import ensure_common_space, space_by_name
 from db.connection import get_conn
 from ingestion.core import (
-    DEFAULT_NAMESPACE, document_exists, insert_document, sha256_text,
+    document_exists, insert_document, sha256_text,
 )
 from webui.workers.ingest_queue import IngestQueue
 

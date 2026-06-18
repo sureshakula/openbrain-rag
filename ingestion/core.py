@@ -55,14 +55,6 @@ def embed(text: str, timeout: int = 30) -> list[float] | None:
         return None
 
 
-DEFAULT_NAMESPACE = "general"
-
-# Suggested namespaces shown in upload UI dropdown. Free-form: any string allowed.
-SUGGESTED_NAMESPACES = [
-    "general", "code", "operations", "product", "sales_marketing", "company_hr",
-]
-
-
 def insert_document(conn, *, source_type: str, source_ref: str, title: str,
                     raw_content: str, content_hash: str, file_size: int | None,
                     file_extension: str | None, status: str,

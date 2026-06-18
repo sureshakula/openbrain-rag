@@ -8,6 +8,7 @@ from webui.app import create_app
 async def client():
     app = create_app(start_workers=False)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        c.cookies.set("ob_user", "appuser")
         yield c
 
 

@@ -4,6 +4,7 @@ from pathlib import Path
 
 from webui.workers.ingest_queue import ingest_one, IngestQueue
 from ingestion.core import sha256_text
+from accounts.core import ensure_common_space
 
 
 @pytest.fixture
@@ -29,14 +30,16 @@ async def test_ingest_one_happy_path(db, sample_txt, monkeypatch):
 
     monkeypatch.setattr("ingestion.core.requests.post", fake_post)
 
+    space_id = ensure_common_space(db)
     with db.cursor() as cur:
         cur.execute(
             """INSERT INTO documents
                (source_type, source_ref, title, content_hash, raw_content,
-                status, file_size, file_extension)
-               VALUES ('web_ui', %s, 'sample', %s, '', 'queued', %s, '.txt')
+                status, file_size, file_extension, space_id)
+               VALUES ('web_ui', %s, 'sample', %s, '', 'queued', %s, '.txt', %s)
                RETURNING id""",
-            (str(sample_txt), sha256_text(sample_txt.read_text()), sample_txt.stat().st_size),
+            (str(sample_txt), sha256_text(sample_txt.read_text()),
+             sample_txt.stat().st_size, space_id),
         )
         doc_id = cur.fetchone()["id"]
     db.commit()
@@ -55,13 +58,14 @@ async def test_ingest_one_happy_path(db, sample_txt, monkeypatch):
 async def test_ingest_one_unsupported_marks_failed(db, tmp_path):
     bad = tmp_path / "x.xyz"
     bad.write_bytes(b"junk")
+    space_id = ensure_common_space(db)
     with db.cursor() as cur:
         cur.execute(
             """INSERT INTO documents
                (source_type, source_ref, title, content_hash, raw_content,
-                status, file_size, file_extension)
-               VALUES ('web_ui', %s, 'x', 'h1', '', 'queued', 4, '.xyz') RETURNING id""",
-            (str(bad),),
+                status, file_size, file_extension, space_id)
+               VALUES ('web_ui', %s, 'x', 'h1', '', 'queued', 4, '.xyz', %s) RETURNING id""",
+            (str(bad), space_id),
         )
         doc_id = cur.fetchone()["id"]
     db.commit()
