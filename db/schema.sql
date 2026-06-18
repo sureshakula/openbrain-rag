@@ -152,3 +152,38 @@ ALTER TABLE chunks
         GENERATED ALWAYS AS (to_tsvector('english', content)) STORED;
 
 CREATE INDEX IF NOT EXISTS idx_chunks_content_tsv ON chunks USING GIN (content_tsv);
+
+-- ─────────────────────────────────────────
+-- MULTI-USER SPACES
+-- ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS users (
+    id          SERIAL PRIMARY KEY,
+    username    TEXT NOT NULL UNIQUE,
+    mcp_token   TEXT NOT NULL UNIQUE,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS spaces (
+    id          SERIAL PRIMARY KEY,
+    name        TEXT NOT NULL,
+    kind        TEXT NOT NULL CHECK (kind IN ('personal','shared')),
+    created_by  INTEGER REFERENCES users(id),
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- One shared space per name (case-insensitive). Personal names are not unique.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_spaces_shared_name
+    ON spaces (lower(name)) WHERE kind = 'shared';
+
+CREATE TABLE IF NOT EXISTS space_members (
+    space_id    INTEGER NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+    user_id     INTEGER NOT NULL REFERENCES users(id)  ON DELETE CASCADE,
+    role        TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('owner','member')),
+    PRIMARY KEY (space_id, user_id)
+);
+
+-- Seed the built-in Common shared space (created_by NULL).
+INSERT INTO spaces (name, kind, created_by)
+SELECT 'Common', 'shared', NULL
+WHERE NOT EXISTS (
+    SELECT 1 FROM spaces WHERE kind = 'shared' AND lower(name) = 'common'
+);

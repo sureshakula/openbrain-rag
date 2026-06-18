@@ -55,7 +55,8 @@ def db(db_dsn):
     with conn.cursor() as cur:
         cur.execute("""
             TRUNCATE draft_citations, drafts, review_queue, synthesis_runs,
-                     knowledge_base, chunks, documents RESTART IDENTITY CASCADE;
+                     knowledge_base, chunks, documents,
+                     space_members, spaces, users RESTART IDENTITY CASCADE;
         """)
     conn.commit()
     yield conn
