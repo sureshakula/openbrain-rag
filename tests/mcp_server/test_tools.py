@@ -122,3 +122,20 @@ def test_tool_list_documents_limit(db):
         _seed_doc(db, f"d{i}", f"body {i}", [0.1] * 768)
     rows = t_list(limit=3)
     assert len(rows) == 3
+
+
+from accounts.core import get_or_create_user, ensure_common_space, accessible_space_ids
+from mcp_server.server import _resolve_scope
+
+
+def test_resolve_scope_valid_token(db):
+    u = get_or_create_user(db, "mcpuser")
+    db.commit()
+    user, space_ids = _resolve_scope(u["mcp_token"])
+    assert user["id"] == u["id"]
+    assert set(space_ids) == set(accessible_space_ids(db, u["id"]))
+
+
+def test_resolve_scope_invalid_token(db):
+    user, space_ids = _resolve_scope("bogus")
+    assert user is None and space_ids == []

@@ -17,8 +17,45 @@ from datetime import datetime
 
 from mcp.server.fastmcp import FastMCP
 
+from accounts.core import user_by_token, accessible_space_ids
 from db.connection import get_conn
 from retrieval.search import SearchFilters, search as do_search
+
+
+def _bearer_token() -> str | None:
+    """Read the Authorization: Bearer token from the current MCP HTTP request.
+
+    The streamable-HTTP transport populates RequestContext.request with the
+    raw Starlette Request object.  We reach it via the request_ctx ContextVar
+    exposed by mcp.server.lowlevel.server.  Outside a live request (e.g. in
+    unit tests) the ContextVar is unset, so we return None gracefully.
+    """
+    try:
+        from mcp.server.lowlevel.server import request_ctx
+        ctx = request_ctx.get()          # raises LookupError outside a request
+        req = ctx.request                # Starlette Request (or None for SSE)
+        if req is None:
+            return None
+        auth = req.headers.get("authorization", "")
+    except Exception:
+        return None
+    if auth.lower().startswith("bearer "):
+        return auth[7:].strip()
+    return None
+
+
+def _resolve_scope(token: str | None) -> tuple[dict | None, list[int]]:
+    """Resolve a bearer token to (user, accessible_space_ids).
+
+    Returns (None, []) when the token is absent or not found.
+    """
+    if not token:
+        return None, []
+    with get_conn() as conn:
+        user = user_by_token(conn, token)
+        if not user:
+            return None, []
+        return user, accessible_space_ids(conn, user["id"])
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("openbrain.mcp")
