@@ -11,7 +11,7 @@ from ingestion.core import embed
 class SearchFilters:
     source_types: list[str] = field(default_factory=list)
     file_extensions: list[str] = field(default_factory=list)
-    namespaces: list[str] = field(default_factory=list)
+    space_ids: list[int] | None = None   # None = no scope filter; [] = fail-closed (match nothing)
 
 
 @dataclass
@@ -32,8 +32,8 @@ def _build_where(filters: SearchFilters | None) -> tuple[str, list]:
         clauses.append("d.source_type = ANY(%s)"); args.append(filters.source_types)
     if filters and filters.file_extensions:
         clauses.append("d.file_extension = ANY(%s)"); args.append(filters.file_extensions)
-    if filters and filters.namespaces:
-        clauses.append("d.namespace = ANY(%s)"); args.append(filters.namespaces)
+    if filters is not None and filters.space_ids is not None:
+        clauses.append("d.space_id = ANY(%s)"); args.append(filters.space_ids)
     return " AND ".join(clauses), args
 
 
