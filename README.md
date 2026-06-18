@@ -94,6 +94,8 @@ Flags: `--keep <table>` skips a specific table; `--db <name>` targets a specific
 | `/inventory` | Live document list with status (queued/processing/indexed/failed). Polls every 5s. Filter by status/source/title. |
 | `/docgen` | Topic prompt + doc type + optional source filter → hybrid retrieval → Claude → draft with inline `[N]` citations. |
 | `/drafts` | Review queue with in-UI Accept (→ BookStack stub) / Reject (with feedback) / Abandon actions. |
+| `/chat` | RAG chat over the document store. Persisted per-user conversations; each question retrieves space-scoped chunks → Claude answers with inline `[N]` citations (non-streaming). |
+| `/spaces` | Create/join shared spaces; see your accessible spaces. |
 | `/health` | JSON health check. |
 
 ## Run without Docker (local Python)
