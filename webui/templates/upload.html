@@ -8,16 +8,12 @@
   <div class="label">File (max {{ max_mb if max_mb is defined else 500 }} MB)</div>
   <input type="file" name="file" required class="input" style="width: 100%; padding: 10px;">
 
-  <div class="label" style="margin-top: 14px;">Namespace</div>
-  <input list="namespace-list" name="namespace" value="{{ default_namespace }}"
-         class="input" style="width: 100%; padding: 8px;"
-         placeholder="general — or pick / type any namespace">
-  <datalist id="namespace-list">
-    {% for ns in namespaces %}<option value="{{ ns }}">{% endfor %}
-  </datalist>
-  <div style="color: var(--muted); font-size: 11px; margin-top: 4px;">
-    Free-form. Suggested: {{ namespaces | join(", ") }}.
-  </div>
+  <div class="label" style="margin-top: 14px;">Space</div>
+  <select class="input" name="space" style="width: 100%; padding: 8px;">
+    {% for s in spaces %}
+      <option value="{{ s.id }}">{{ s.name }}</option>
+    {% endfor %}
+  </select>
 
   <div style="margin-top: 14px;">
     <button type="submit" class="btn primary">Upload</button>

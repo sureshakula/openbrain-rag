@@ -7,40 +7,61 @@ from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 import config
+from accounts.core import accessible_space_ids, ensure_common_space, list_spaces_for
 from db.connection import get_conn
-from ingestion.core import DEFAULT_NAMESPACE, SUGGESTED_NAMESPACES, insert_document, sha256_text
+from ingestion.core import insert_document, sha256_text
 from webui.app import render
+from webui.routes.auth import current_user
 
 router = APIRouter()
 
 
 @router.get("/upload", response_class=HTMLResponse)
 async def upload_form(request: Request):
+    user = current_user(request)
+    if user is None:
+        return RedirectResponse(url="/login", status_code=307)
+    with get_conn() as conn:
+        spaces = list_spaces_for(conn, user["id"])
     return render(
         request, "upload.html",
-        {"page": "upload", "namespaces": SUGGESTED_NAMESPACES,
-         "default_namespace": DEFAULT_NAMESPACE},
+        {"page": "upload", "spaces": spaces},
     )
 
 
 @router.post("/upload")
 async def upload_post(request: Request,
                       file: UploadFile = File(...),
-                      namespace: str = Form(DEFAULT_NAMESPACE)):
+                      space: str = Form("")):
+    user = current_user(request)
+    if user is None:
+        return RedirectResponse(url="/login", status_code=307)
+
     max_bytes = config.MAX_UPLOAD_MB * 1024 * 1024
     data = await file.read()
     if len(data) > max_bytes:
         raise HTTPException(status_code=413,
                             detail=f"file exceeds {config.MAX_UPLOAD_MB} MB")
 
-    upload_dir = Path(config.UPLOAD_DIR)
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    content_hash = sha256_text(data.decode("utf-8", errors="replace"))
-    ext = Path(file.filename or "").suffix.lower()
-    saved_path = upload_dir / f"{content_hash}{ext}"
-    saved_path.write_bytes(data)
-
     with get_conn() as conn:
+        # Resolve the target space id
+        allowed = accessible_space_ids(conn, user["id"])
+        common_id = ensure_common_space(conn)
+
+        space_id: int
+        try:
+            requested = int(space)
+            space_id = requested if requested in allowed else common_id
+        except (ValueError, TypeError):
+            space_id = common_id
+
+        upload_dir = Path(config.UPLOAD_DIR)
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        content_hash = sha256_text(data.decode("utf-8", errors="replace"))
+        ext = Path(file.filename or "").suffix.lower()
+        saved_path = upload_dir / f"{content_hash}{ext}"
+        saved_path.write_bytes(data)
+
         doc_id = insert_document(
             conn,
             source_type="web_ui",
@@ -51,7 +72,8 @@ async def upload_post(request: Request,
             file_size=len(data),
             file_extension=ext,
             status="queued",
-            namespace=(namespace or DEFAULT_NAMESPACE).strip().lower(),
+            space_id=space_id,
+            created_by=user["id"],
             metadata={"original_filename": file.filename},
         )
 
