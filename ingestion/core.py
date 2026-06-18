@@ -66,7 +66,7 @@ SUGGESTED_NAMESPACES = [
 def insert_document(conn, *, source_type: str, source_ref: str, title: str,
                     raw_content: str, content_hash: str, file_size: int | None,
                     file_extension: str | None, status: str,
-                    namespace: str = DEFAULT_NAMESPACE,
+                    space_id: int, created_by: int | None = None,
                     metadata: dict | None = None) -> int:
     """Insert a document row. Returns new document id."""
     metadata = metadata or {}
@@ -75,15 +75,16 @@ def insert_document(conn, *, source_type: str, source_ref: str, title: str,
             """
             INSERT INTO documents
                 (source_type, source_ref, title, content_hash, raw_content,
-                 metadata, status, file_size, file_extension, namespace)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 metadata, status, file_size, file_extension, space_id, created_by)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
             """,
             (source_type, source_ref, title, content_hash, raw_content,
              psycopg2.extras.Json(metadata), status, file_size, file_extension,
-             namespace or DEFAULT_NAMESPACE),
+             space_id, created_by),
         )
-        return cur.fetchone()[0]
+        row = cur.fetchone()
+        return row["id"] if isinstance(row, dict) else row[0]
 
 
 def document_exists(conn, content_hash: str) -> int | None:

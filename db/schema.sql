@@ -137,11 +137,9 @@ ALTER TABLE documents
     ADD COLUMN IF NOT EXISTS failure_reason TEXT,
     ADD COLUMN IF NOT EXISTS active         BOOLEAN NOT NULL DEFAULT TRUE,
     ADD COLUMN IF NOT EXISTS file_size      BIGINT,
-    ADD COLUMN IF NOT EXISTS file_extension TEXT,
-    ADD COLUMN IF NOT EXISTS namespace      TEXT NOT NULL DEFAULT 'general';
+    ADD COLUMN IF NOT EXISTS file_extension TEXT;
 
-CREATE INDEX IF NOT EXISTS idx_documents_active    ON documents(active);
-CREATE INDEX IF NOT EXISTS idx_documents_namespace ON documents(namespace);
+CREATE INDEX IF NOT EXISTS idx_documents_active ON documents(active);
 
 -- ─────────────────────────────────────────
 -- WEBUI: BM25 SUPPORT
@@ -187,3 +185,31 @@ SELECT 'Common', 'shared', NULL
 WHERE NOT EXISTS (
     SELECT 1 FROM spaces WHERE kind = 'shared' AND lower(name) = 'common'
 );
+
+-- ─────────────────────────────────────────
+-- DOCUMENTS → SPACES MIGRATION (idempotent)
+-- ─────────────────────────────────────────
+ALTER TABLE documents
+    ADD COLUMN IF NOT EXISTS space_id   INTEGER REFERENCES spaces(id),
+    ADD COLUMN IF NOT EXISTS created_by INTEGER REFERENCES users(id);
+
+-- Backfill legacy rows into Common, preserving the old namespace value.
+DO $$
+DECLARE common_id INTEGER;
+BEGIN
+    SELECT id INTO common_id FROM spaces WHERE kind='shared' AND lower(name)='common';
+    IF EXISTS (SELECT 1 FROM information_schema.columns
+               WHERE table_name='documents' AND column_name='namespace') THEN
+        EXECUTE
+          'UPDATE documents
+              SET metadata = jsonb_set(coalesce(metadata,''{}''::jsonb),
+                                       ''{namespace_legacy}'', to_jsonb(namespace), true)
+            WHERE namespace IS NOT NULL';
+    END IF;
+    UPDATE documents SET space_id = common_id WHERE space_id IS NULL;
+END $$;
+
+ALTER TABLE documents ALTER COLUMN space_id SET NOT NULL;
+DROP INDEX IF EXISTS idx_documents_namespace;
+ALTER TABLE documents DROP COLUMN IF EXISTS namespace;
+CREATE INDEX IF NOT EXISTS idx_documents_space ON documents(space_id);
