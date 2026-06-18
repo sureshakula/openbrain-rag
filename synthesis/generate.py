@@ -1,13 +1,8 @@
 """Topic → retrieve → draft. Separate from synthesize.py (per-document mode)."""
 from __future__ import annotations
-import re
-from dataclasses import dataclass
 
-import httpx
-
-import config  # read settings dynamically at call time so env/reload changes take effect
 from retrieval.search import Chunk
-
+from synthesis.llm import call_claude, map_citations, Citation  # Citation re-exported
 
 DOC_TYPES = [
     "process", "architecture", "meeting_summary",
@@ -23,15 +18,6 @@ DOC_TYPE_INSTRUCTIONS = {
     "release_note": "Write release notes. Sections: highlights, changes, breaking changes, upgrade notes.",
 }
 
-
-@dataclass
-class Citation:
-    citation_index: int
-    chunk_id: int
-    document_id: int
-    document_title: str
-
-
 SYSTEM_PROMPT = """You write internal documentation for VOZIQ. You are given a topic and a set of source chunks.
 Write a clear, accurate document using ONLY the information in the source chunks.
 Cite sources inline using [N] markers matching the chunk numbers provided.
@@ -40,13 +26,8 @@ If the sources do not cover something needed for the topic, say "Not covered by 
 
 def _build_user_prompt(topic: str, doc_type: str, chunks: list[Chunk]) -> str:
     instruction = DOC_TYPE_INSTRUCTIONS.get(doc_type, DOC_TYPE_INSTRUCTIONS["process"])
-    parts = [
-        f"Topic: {topic}",
-        f"Document type: {doc_type}",
-        f"Instructions: {instruction}",
-        "",
-        "Source chunks:",
-    ]
+    parts = [f"Topic: {topic}", f"Document type: {doc_type}",
+             f"Instructions: {instruction}", "", "Source chunks:"]
     for i, c in enumerate(chunks, start=1):
         parts.append(f"[{i}] {c.document_title}\n{c.content}")
         parts.append("")
@@ -54,50 +35,10 @@ def _build_user_prompt(topic: str, doc_type: str, chunks: list[Chunk]) -> str:
     return "\n".join(parts)
 
 
-def _extract_cited_indices(body: str) -> list[int]:
-    indices: list[int] = []
-    seen: set[int] = set()
-    for m in re.finditer(r"\[(\d+(?:\s*,\s*\d+)*)\]", body):
-        for piece in m.group(1).split(","):
-            try:
-                n = int(piece.strip())
-                if n not in seen:
-                    seen.add(n); indices.append(n)
-            except ValueError:
-                continue
-    return indices
-
-
 def generate(topic: str, doc_type: str, chunks: list[Chunk]) -> tuple[str, list[Citation]]:
     """Build prompt, call Claude, parse cited indices, return (body, citations)."""
     if doc_type not in DOC_TYPES:
         doc_type = "process"
     user_prompt = _build_user_prompt(topic, doc_type, chunks)
-    payload = {
-        "model": config.SYNTHESIS_MODEL,
-        "max_tokens": config.SYNTHESIS_MAX_TOKENS,
-        "system": SYSTEM_PROMPT,
-        "messages": [{"role": "user", "content": user_prompt}],
-    }
-    headers = {
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-    }
-    if config.ANTHROPIC_AUTH_TOKEN:
-        headers["Authorization"] = f"Bearer {config.ANTHROPIC_AUTH_TOKEN}"
-    if config.ANTHROPIC_API_KEY:
-        headers["x-api-key"] = config.ANTHROPIC_API_KEY
-    url = f"{config.ANTHROPIC_BASE_URL.rstrip('/')}/v1/messages"
-    r = httpx.post(url, json=payload, headers=headers, timeout=config.SYNTHESIS_TIMEOUT_SEC)
-    r.raise_for_status()
-    data = r.json()
-    body = "".join(block["text"] for block in data["content"] if block.get("type") == "text")
-    cited_indices = _extract_cited_indices(body)
-    citations: list[Citation] = []
-    for idx in cited_indices:
-        if 1 <= idx <= len(chunks):
-            c = chunks[idx - 1]
-            citations.append(Citation(citation_index=idx, chunk_id=c.chunk_id,
-                                       document_id=c.document_id,
-                                       document_title=c.document_title))
-    return body, citations
+    body = call_claude(SYSTEM_PROMPT, user_prompt)
+    return body, map_citations(body, chunks)
