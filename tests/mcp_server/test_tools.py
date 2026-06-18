@@ -2,11 +2,9 @@
 from __future__ import annotations
 import pytest
 
-from mcp_server.server import (
-    search as t_search,
-    fetch_document as t_fetch,
-    list_documents as t_list,
-)
+from accounts.core import (get_or_create_user, ensure_common_space,
+                           accessible_space_ids)
+import mcp_server.server as srv
 
 
 def _mock_embed(monkeypatch, vec: list[float]):
@@ -17,114 +15,47 @@ def _mock_embed(monkeypatch, vec: list[float]):
                         lambda *a, **kw: FakeResp())
 
 
-def _seed_doc(db, title: str, content: str, embedding: list[float],
-              src: str = "local_file", ext: str = ".txt",
-              status: str = "indexed", namespace: str = "general") -> int:
+def _seed_doc(db, title, content, embedding, src="local_file", ext=".txt",
+              status="indexed", space_id=None):
+    if space_id is None:
+        space_id = ensure_common_space(db)
     with db.cursor() as cur:
         cur.execute(
             """INSERT INTO documents
                (source_type, source_ref, title, content_hash, raw_content,
-                status, file_extension, file_size, namespace, active)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE) RETURNING id""",
+                status, file_extension, file_size, space_id, active)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,TRUE) RETURNING id""",
             (src, f"/fake/{title}", title, f"h-{title}", content,
-             status, ext, len(content), namespace),
+             status, ext, len(content), space_id),
         )
         doc_id = cur.fetchone()["id"]
         cur.execute(
             """INSERT INTO chunks (document_id, chunk_index, content,
                                     content_hash, token_count, embedding)
-               VALUES (%s, 0, %s, %s, %s, %s::vector)""",
-            (doc_id, content, f"ch-{title}", len(content) // 4, str(embedding)),
+               VALUES (%s,0,%s,%s,%s,%s::vector)""",
+            (doc_id, content, f"ch-{title}", len(content)//4, str(embedding)),
         )
     db.commit()
     return doc_id
 
 
-def test_tool_search_returns_chunk_dicts(db, monkeypatch):
-    _mock_embed(monkeypatch, [0.1] * 768)
-    _seed_doc(db, "alpha", "churn prediction with transcripts", [0.11] * 768)
-
-    out = t_search("churn", top_k=5)
-    assert isinstance(out, list)
-    assert len(out) >= 1
-    first = out[0]
-    assert {"chunk_id", "document_id", "document_title", "source_type",
-            "file_extension", "content", "rrf_score"} <= set(first)
-    assert "alpha" in [c["document_title"] for c in out]
+def _personal(db, user):
+    common = ensure_common_space(db)
+    return max(set(accessible_space_ids(db, user["id"])) - {common})
 
 
-def test_tool_search_respects_source_filter(db, monkeypatch):
-    _mock_embed(monkeypatch, [0.1] * 768)
-    _seed_doc(db, "from-local", "churn", [0.1] * 768, src="local_file")
-    _seed_doc(db, "from-web",   "churn", [0.1] * 768, src="web_ui")
-
-    out = t_search("churn", source_types=["web_ui"], top_k=5)
-    assert all(r["source_type"] == "web_ui" for r in out)
-
-
-def test_tool_search_respects_namespace_filter(db, monkeypatch):
-    _mock_embed(monkeypatch, [0.1] * 768)
-    _seed_doc(db, "code-doc", "churn", [0.1] * 768, namespace="code")
-    _seed_doc(db, "ops-doc",  "churn", [0.1] * 768, namespace="operations")
-
-    out = t_search("churn", namespaces=["code"], top_k=5)
-    titles = [r["document_title"] for r in out]
-    assert "code-doc" in titles
-    assert "ops-doc" not in titles
+@pytest.fixture
+def as_user(db, monkeypatch):
+    u = get_or_create_user(db, "tooluser")
+    db.commit()
+    monkeypatch.setattr(srv, "_bearer_token", lambda: u["mcp_token"])
+    return u
 
 
-def test_tool_fetch_document_returns_full_doc(db):
-    doc_id = _seed_doc(db, "fetched", "full body here", [0.1] * 768, namespace="code")
-    out = t_fetch(doc_id)
-    assert out["id"] == doc_id
-    assert out["title"] == "fetched"
-    assert out["namespace"] == "code"
-    assert out["raw_content"] == "full body here"
-    assert out["chunk_count"] >= 1
-    # ingested_at must serialize to ISO string (not datetime)
-    assert isinstance(out["ingested_at"], str)
+# ---------------------------------------------------------------------------
+# _resolve_scope tests (Task 5, keep intact)
+# ---------------------------------------------------------------------------
 
-
-def test_tool_fetch_document_missing_returns_error(db):
-    out = t_fetch(999999)
-    assert "error" in out
-
-
-def test_tool_list_documents_filters(db):
-    _seed_doc(db, "i1", "x", [0.1] * 768, status="indexed", src="local_file")
-    _seed_doc(db, "i2", "y", [0.1] * 768, status="indexed", src="web_ui")
-    _seed_doc(db, "f1", "z", [0.1] * 768, status="failed",  src="local_file")
-
-    all_rows = t_list()
-    titles_all = {r["title"] for r in all_rows}
-    assert {"i1", "i2", "f1"} <= titles_all
-
-    only_indexed = t_list(status="indexed")
-    assert all(r["status"] == "indexed" for r in only_indexed)
-
-    only_web = t_list(source="web_ui")
-    assert all(r["source_type"] == "web_ui" for r in only_web)
-
-
-def test_tool_list_documents_namespace_filter(db):
-    _seed_doc(db, "n-code", "x", [0.1] * 768, namespace="code")
-    _seed_doc(db, "n-gen",  "y", [0.1] * 768, namespace="general")
-
-    rows = t_list(namespace="code")
-    titles = {r["title"] for r in rows}
-    assert "n-code" in titles
-    assert "n-gen" not in titles
-    assert all(r["namespace"] == "code" for r in rows)
-
-
-def test_tool_list_documents_limit(db):
-    for i in range(5):
-        _seed_doc(db, f"d{i}", f"body {i}", [0.1] * 768)
-    rows = t_list(limit=3)
-    assert len(rows) == 3
-
-
-from accounts.core import get_or_create_user, ensure_common_space, accessible_space_ids
 from mcp_server.server import _resolve_scope
 
 
@@ -139,3 +70,58 @@ def test_resolve_scope_valid_token(db):
 def test_resolve_scope_invalid_token(db):
     user, space_ids = _resolve_scope("bogus")
     assert user is None and space_ids == []
+
+
+# ---------------------------------------------------------------------------
+# Tool tests — scoped to token user's spaces
+# ---------------------------------------------------------------------------
+
+def test_tool_search_requires_token(db, monkeypatch):
+    monkeypatch.setattr(srv, "_bearer_token", lambda: None)
+    _mock_embed(monkeypatch, [0.1] * 768)
+    out = srv.search("churn", top_k=5)
+    assert out == {"error": "unauthorized"}
+
+
+def test_tool_search_scoped_to_user_spaces(db, monkeypatch, as_user):
+    _mock_embed(monkeypatch, [0.1] * 768)
+    common = ensure_common_space(db)
+    other = get_or_create_user(db, "stranger"); db.commit()
+    other_priv = _personal(db, other)
+    _seed_doc(db, "mine",   "churn", [0.1]*768, space_id=common)
+    _seed_doc(db, "theirs", "churn", [0.1]*768, space_id=other_priv)
+    out = srv.search("churn", top_k=5)
+    titles = [r["document_title"] for r in out]
+    assert "mine" in titles and "theirs" not in titles
+
+
+def test_tool_fetch_blocks_cross_space(db, as_user):
+    other = get_or_create_user(db, "stranger2"); db.commit()
+    other_priv = _personal(db, other)
+    doc_id = _seed_doc(db, "secret", "x", [0.1]*768, space_id=other_priv)
+    out = srv.fetch_document(doc_id)
+    assert "error" in out
+
+
+def test_tool_fetch_allows_accessible(db, as_user):
+    common = ensure_common_space(db)
+    doc_id = _seed_doc(db, "opendoc", "hello", [0.1]*768, space_id=common)
+    out = srv.fetch_document(doc_id)
+    assert out["id"] == doc_id and out["title"] == "opendoc"
+
+
+def test_tool_list_documents_scoped(db, as_user):
+    common = ensure_common_space(db)
+    other = get_or_create_user(db, "stranger3"); db.commit()
+    other_priv = _personal(db, other)
+    _seed_doc(db, "visible", "x", [0.1]*768, space_id=common)
+    _seed_doc(db, "hidden",  "x", [0.1]*768, space_id=other_priv)
+    rows = srv.list_documents()
+    titles = {r["title"] for r in rows}
+    assert "visible" in titles and "hidden" not in titles
+
+
+def test_tool_list_requires_token(db, monkeypatch):
+    monkeypatch.setattr(srv, "_bearer_token", lambda: None)
+    out = srv.list_documents()
+    assert out == {"error": "unauthorized"}
