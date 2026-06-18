@@ -10,7 +10,7 @@ Usage:
     python ingestion/ingest_local.py --folder /path/to/docs
     python ingestion/ingest_local.py --folder /path/to/docs --dry-run
     python ingestion/ingest_local.py --file /path/to/one/file.md
-    python ingestion/ingest_local.py --folder /path/to/docs --namespace code
+    python ingestion/ingest_local.py --folder /path/to/docs --space code
 """
 
 import argparse
@@ -50,7 +50,7 @@ def read_file(path: Path) -> str | None:
 
 # ── Reusable core ──────────────────────────────────────────────────────────────
 from ingestion.core import (
-    DEFAULT_NAMESPACE, chunk_text, embed, document_exists,
+    chunk_text, embed, document_exists,
     insert_chunks, set_status, sha256_text,
 )
 
@@ -58,7 +58,7 @@ from ingestion.core import (
 # ── Document insert (CLI-specific: 'local_file', from filesystem) ──────────────
 
 def insert_document(conn, path: Path, content: str, content_hash: str,
-                    namespace: str = DEFAULT_NAMESPACE) -> int:
+                    space_id: int, created_by: int | None = None) -> int:
     from ingestion.core import insert_document as _insert
     return _insert(
         conn,
@@ -70,9 +70,9 @@ def insert_document(conn, path: Path, content: str, content_hash: str,
         file_size=path.stat().st_size,
         file_extension=path.suffix,
         status="pending",
-        namespace=namespace,
-        metadata={"extension": path.suffix, "size_bytes": path.stat().st_size,
-                  "namespace": namespace},
+        space_id=space_id,
+        created_by=created_by,
+        metadata={"extension": path.suffix, "size_bytes": path.stat().st_size},
     )
 
 
@@ -83,7 +83,7 @@ def mark_chunked(conn, document_id: int) -> None:
 # ── Main ───────────────────────────────────────────────────────────────────────
 
 def ingest_file(conn, path: Path, dry_run: bool = False,
-                namespace: str = DEFAULT_NAMESPACE) -> bool:
+                space_id: int = None, created_by: int | None = None) -> bool:
     """Ingest a single file. Returns True if processed, False if skipped."""
     content = read_file(path)
     if content is None:
@@ -114,7 +114,8 @@ def ingest_file(conn, path: Path, dry_run: bool = False,
         time.sleep(0.05)  # don't hammer Ollama
     print(f"    Embedded {sum(1 for e in embeddings if e)}/{len(chunks)} chunks")
 
-    doc_id = insert_document(conn, path, content, content_hash, namespace=namespace)
+    doc_id = insert_document(conn, path, content, content_hash,
+                             space_id=space_id, created_by=created_by)
     insert_chunks(conn, doc_id, chunks, embeddings)
     mark_chunked(conn, doc_id)
 
@@ -123,7 +124,7 @@ def ingest_file(conn, path: Path, dry_run: bool = False,
 
 
 def ingest_folder(folder: Path, dry_run: bool = False,
-                  namespace: str = DEFAULT_NAMESPACE):
+                  space_id: int = None, created_by: int | None = None):
     files = sorted(
         f for f in folder.rglob("*")
         if f.is_file() and f.suffix.lower() in SUPPORTED_EXTENSIONS
@@ -140,7 +141,8 @@ def ingest_folder(folder: Path, dry_run: bool = False,
     with get_conn() as conn:
         for path in files:
             try:
-                result = ingest_file(conn, path, dry_run=dry_run, namespace=namespace)
+                result = ingest_file(conn, path, dry_run=dry_run,
+                                     space_id=space_id, created_by=created_by)
                 if result:
                     processed += 1
                 else:
@@ -161,13 +163,23 @@ if __name__ == "__main__":
     group.add_argument("--folder", type=Path, help="Ingest all files in a folder (recursive)")
     group.add_argument("--file",   type=Path, help="Ingest a single file")
     parser.add_argument("--dry-run", action="store_true", help="No DB writes")
-    parser.add_argument("--namespace", default=DEFAULT_NAMESPACE,
-                        help=f"Namespace tag for ingested docs (default: {DEFAULT_NAMESPACE})")
+    parser.add_argument("--space", default="Common", help="Target space name (default: Common)")
+    parser.add_argument("--user", default=None, help="Username to attribute ingestion to")
     args = parser.parse_args()
-    namespace = (args.namespace or DEFAULT_NAMESPACE).strip().lower()
+
+    from accounts.core import ensure_common_space, space_by_name, get_or_create_user
+    with get_conn() as conn:
+        created_by = get_or_create_user(conn, args.user)["id"] if args.user else None
+        if args.space.strip().lower() == "common":
+            space_id = ensure_common_space(conn)
+        else:
+            sp = space_by_name(conn, args.space)
+            if not sp:
+                parser.error(f"shared space '{args.space}' not found")
+            space_id = sp["id"]
 
     if args.file:
         with get_conn() as conn:
-            ingest_file(conn, args.file, dry_run=args.dry_run, namespace=namespace)
+            ingest_file(conn, args.file, dry_run=args.dry_run, space_id=space_id, created_by=created_by)
     else:
-        ingest_folder(args.folder, dry_run=args.dry_run, namespace=namespace)
+        ingest_folder(args.folder, dry_run=args.dry_run, space_id=space_id, created_by=created_by)
