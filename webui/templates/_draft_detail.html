@@ -5,8 +5,8 @@
       {{ draft.doc_type }} · {{ draft.created_at.strftime('%Y-%m-%d %H:%M') }} · status: {{ draft.status }}
     </div>
   </div>
-  {% if draft.status == 'pending' %}
-  <div style="display: flex; gap: 6px;">
+  <div style="display: flex; gap: 6px; align-items: center;">
+    {% if draft.status == 'pending' %}
     <button class="btn danger"
             hx-get="/drafts/{{ draft.id }}/reject-form"
             hx-target="#action-result" hx-swap="innerHTML">Reject</button>
@@ -18,8 +18,12 @@
             hx-post="/drafts/{{ draft.id }}/accept"
             hx-target="#action-result" hx-swap="innerHTML"
             hx-confirm="Publish to BookStack (stub) and mark accepted?">Accept → BookStack</button>
+    {% endif %}
+    <button class="btn danger" style="margin-left:6px;"
+            hx-post="/drafts/{{ draft.id }}/delete"
+            hx-target="#draft-row-{{ draft.id }}" hx-swap="outerHTML"
+            hx-confirm="Delete this draft permanently?">Delete</button>
   </div>
-  {% endif %}
 </div>
 
 <div class="draft-body">{{ draft.body_markdown }}</div>

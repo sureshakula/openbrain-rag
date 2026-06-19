@@ -119,3 +119,16 @@ async def draft_abandon(request: Request, draft_id: int):
                 (draft_id,),
             )
     return HTMLResponse('<div class="status">abandoned</div>')
+
+
+@router.post("/drafts/{draft_id}/delete", response_class=HTMLResponse)
+async def draft_delete(request: Request, draft_id: int):
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM drafts WHERE id=%s", (draft_id,))
+    # remove the list row (hx-target) and reset the detail pane via OOB swap
+    return HTMLResponse(
+        '<div id="draft-pane" hx-swap-oob="innerHTML">'
+        '<div style="color: var(--muted); text-align: center; padding: 40px 0;">Select a draft.</div>'
+        '</div>'
+    )

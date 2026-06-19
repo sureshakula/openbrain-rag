@@ -6,7 +6,7 @@
 <div class="split">
   <div class="left">
     {% for d in drafts %}
-      <div style="padding: 10px 12px; border-bottom: 1px solid var(--border); cursor: pointer;"
+      <div id="draft-row-{{ d.id }}" style="padding: 10px 12px; border-bottom: 1px solid var(--border); cursor: pointer;"
            hx-get="/drafts/{{ d.id }}" hx-target="#draft-pane" hx-swap="innerHTML">
         <div style="font-weight: 500;">{{ d.topic }}</div>
         <div style="color: var(--muted); font-size: 11px;">

@@ -70,3 +70,13 @@ async def test_abandon(client, db):
     with db.cursor() as cur:
         cur.execute("SELECT status FROM drafts WHERE id=%s", (did,))
         assert cur.fetchone()["status"] == "abandoned"
+
+
+async def test_delete_draft_removes_it(client, db):
+    did = _seed_draft(db, "t", "abandoned")
+    db.commit()
+    r = await client.post(f"/drafts/{did}/delete")
+    assert r.status_code == 200
+    with db.cursor() as cur:
+        cur.execute("SELECT 1 FROM drafts WHERE id=%s", (did,))
+        assert cur.fetchone() is None
