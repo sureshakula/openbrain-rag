@@ -63,3 +63,30 @@ async def test_inventory_space_filter(client, db):
     db.commit()
     r = await client.get(f"/inventory/rows?space={priv}")
     assert "p-doc" in r.text and "c-doc" not in r.text
+
+
+async def test_delete_document_removes_it(client, db):
+    from accounts.core import get_or_create_user, ensure_common_space, accessible_space_ids
+    common = ensure_common_space(db)
+    user = get_or_create_user(db, "invuser"); db.commit()
+    doc_id = _seed_doc(db, title="to-delete", status="indexed", space_id=common)
+    db.commit()
+    r = await client.post(f"/inventory/{doc_id}/delete")
+    assert r.status_code == 200
+    with db.cursor() as cur:
+        cur.execute("SELECT 1 FROM documents WHERE id=%s", (doc_id,))
+        assert cur.fetchone() is None
+
+
+async def test_cannot_delete_doc_outside_accessible_spaces(client, db):
+    from accounts.core import get_or_create_user, ensure_common_space, accessible_space_ids
+    common = ensure_common_space(db)
+    other = get_or_create_user(db, "other-owner"); db.commit()
+    other_priv = max(set(accessible_space_ids(db, other["id"])) - {common})
+    doc_id = _seed_doc(db, title="not-mine", status="indexed", space_id=other_priv)
+    db.commit()
+    r = await client.post(f"/inventory/{doc_id}/delete")
+    assert r.status_code == 404
+    with db.cursor() as cur:
+        cur.execute("SELECT 1 FROM documents WHERE id=%s", (doc_id,))
+        assert cur.fetchone() is not None

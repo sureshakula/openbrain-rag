@@ -83,3 +83,20 @@ async def inventory_rows(request: Request, status=None, source=None, ftype=None,
         "rows": _query_docs(space_ids=space_ids, status=status, source=source,
                             ftype=ftype, space=space, search=search),
     })
+
+
+@router.post("/inventory/{doc_id}/delete", response_class=HTMLResponse)
+async def inventory_delete(request: Request, doc_id: int):
+    user = current_user(request)
+    if user is None:
+        return RedirectResponse(url="/login", status_code=307)
+    with get_conn() as conn:
+        space_ids = accessible_space_ids(conn, user["id"])
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM documents WHERE id=%s AND space_id = ANY(%s)",
+                        (doc_id, space_ids))
+            if cur.fetchone() is None:
+                return HTMLResponse("Not found", status_code=404)
+            cur.execute("DELETE FROM knowledge_base WHERE document_id=%s", (doc_id,))
+            cur.execute("DELETE FROM documents WHERE id=%s", (doc_id,))
+    return HTMLResponse("")  # empty -> HTMX removes the row

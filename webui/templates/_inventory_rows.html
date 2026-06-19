@@ -12,8 +12,14 @@
       <span title="{{ row.failure_reason }}" style="color: var(--muted); cursor: help;"> ⓘ</span>
     {% endif %}
   </td>
+  <td style="text-align:right">
+    <button class="btn danger" style="padding:2px 8px;"
+            hx-post="/inventory/{{ row.id }}/delete"
+            hx-target="closest tr" hx-swap="outerHTML"
+            hx-confirm="Delete '{{ row.title }}' and its chunks permanently?">✕</button>
+  </td>
 </tr>
 {% endfor %}
 {% if not rows %}
-<tr><td colspan="7" style="color: var(--muted); padding: 24px; text-align: center;">No documents.</td></tr>
+<tr><td colspan="8" style="color: var(--muted); padding: 24px; text-align: center;">No documents.</td></tr>
 {% endif %}
