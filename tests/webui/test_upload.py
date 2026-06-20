@@ -99,3 +99,11 @@ async def test_upload_without_auth_redirects(client, db):
     files = {"file": ("x.txt", b"hello", "text/plain")}
     r = await client.post("/upload", files=files)
     assert r.status_code == 307
+
+
+async def test_upload_honors_max_upload_mb_setting(authed_client, db, tmp_upload_dir):
+    import settings.core as sc
+    sc.set_setting(db, "max_upload_mb", "0"); db.commit()  # 0 MB -> any file too big
+    files = {"file": ("big.md", b"hello world", "text/markdown")}
+    r = await authed_client.post("/upload", data={"space": ""}, files=files)
+    assert r.status_code == 413

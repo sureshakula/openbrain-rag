@@ -154,3 +154,13 @@ async def test_watcher_no_namespace_derivation_attribute(tmp_path):
     assert not hasattr(watcher, "_namespace_for"), (
         "_namespace_for must be removed; namespace derivation is no longer supported"
     )
+
+
+def test_resolve_space_id_uses_setting(db):
+    import settings.core as sc
+    from accounts.core import create_shared_space, get_or_create_user
+    from webui.workers.folder_watcher import FolderWatcher
+    u = get_or_create_user(db, "watchcfg")
+    sp = create_shared_space(db, "WatchTarget", u["id"]); db.commit()
+    sc.set_setting(db, "watch_space", "WatchTarget"); db.commit()
+    assert FolderWatcher._resolve_space_id(db) == sp["id"]

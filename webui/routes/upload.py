@@ -7,6 +7,7 @@ from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 import config
+import settings.core as sc
 from accounts.core import accessible_space_ids, ensure_common_space, list_spaces_for
 from db.connection import get_conn
 from ingestion.core import insert_document, sha256_text
@@ -37,11 +38,13 @@ async def upload_post(request: Request,
     if user is None:
         return RedirectResponse(url="/login", status_code=307)
 
-    max_bytes = config.MAX_UPLOAD_MB * 1024 * 1024
+    with get_conn() as conn:
+        max_mb = sc.get_int(conn, "max_upload_mb")
+    max_bytes = max_mb * 1024 * 1024
     data = await file.read()
     if len(data) > max_bytes:
         raise HTTPException(status_code=413,
-                            detail=f"file exceeds {config.MAX_UPLOAD_MB} MB")
+                            detail=f"file exceeds {max_mb} MB")
 
     with get_conn() as conn:
         # Resolve the target space id

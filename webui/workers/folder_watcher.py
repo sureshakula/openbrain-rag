@@ -19,6 +19,7 @@ from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
 import config
+import settings.core as sc
 from accounts.core import ensure_common_space, space_by_name
 from db.connection import get_conn
 from ingestion.core import (
@@ -122,7 +123,7 @@ class FolderWatcher:
         - If WATCH_SPACE (case-insensitive) is "common", use ensure_common_space.
         - Otherwise look up by name; fall back to Common on miss (with a warning).
         """
-        watch_space = (config.WATCH_SPACE or "").strip()
+        watch_space = (sc.get(conn, "watch_space") or "").strip()
         if watch_space.lower() == "common":
             return ensure_common_space(conn)
         space = space_by_name(conn, watch_space)
