@@ -241,3 +241,12 @@ CREATE TABLE IF NOT EXISTS message_citations (
     citation_index  INTEGER NOT NULL,
     PRIMARY KEY (message_id, chunk_id)
 );
+
+-- ─────────────────────────────────────────
+-- SETTINGS (runtime key/value overrides)
+-- ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS settings (
+    key         TEXT PRIMARY KEY,
+    value       TEXT NOT NULL,
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
