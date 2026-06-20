@@ -6,7 +6,7 @@ Single-machine deployment. Mac Mini M4 24GB target.
 
 ## Stack
 
-- **FastAPI + Jinja + HTMX** — webui (5 pages, no JS build)
+- **FastAPI + Jinja + HTMX** — webui (upload, inventory, docgen, drafts, chat, spaces, settings; no JS build)
 - **Postgres 16 + pgvector** — documents, chunks, drafts, hybrid retrieval (HNSW + tsvector BM25, RRF-merged)
 - **Ollama (`nomic-embed-text`)** — local embeddings (768-dim)
 - **Claude API** — draft generation with inline citations
