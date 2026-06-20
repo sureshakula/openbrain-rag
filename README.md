@@ -96,6 +96,7 @@ Flags: `--keep <table>` skips a specific table; `--db <name>` targets a specific
 | `/drafts` | Review queue with in-UI Accept (→ BookStack stub) / Reject (with feedback) / Abandon actions. |
 | `/chat` | RAG chat over the document store. Persisted per-user conversations; each question retrieves space-scoped chunks → Claude answers with inline `[N]` citations (non-streaming). |
 | `/spaces` | Create/join shared spaces; see your accessible spaces. |
+| `/settings` | Edit watch + ingestion settings at runtime (watch folder/debounce/space/enable, worker count, max upload). Live for upload-limit + watch-space; others apply after an app restart. |
 | `/health` | JSON health check. |
 
 ## Run without Docker (local Python)

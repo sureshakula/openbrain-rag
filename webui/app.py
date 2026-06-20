@@ -46,19 +46,30 @@ def create_app(*, start_workers: bool = True) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
+        import settings.core as sc
+        from db.connection import get_conn
         watcher: FolderWatcher | None = None
         if start_workers:
-            await queue.start(worker_count=INGEST_WORKER_COUNT)
-            log.info("ingest queue started with %d workers", INGEST_WORKER_COUNT)
-            if WATCH_DIR:
-                watch_path = Path(WATCH_DIR)
+            try:
+                with get_conn() as conn:
+                    worker_count = sc.get_int(conn, "ingest_worker_count")
+                    watch_enabled = sc.get_bool(conn, "watch_enabled")
+                    watch_subfolder = sc.get(conn, "watch_subfolder")
+                    debounce = sc.get_int(conn, "watch_debounce_sec")
+            except Exception:
+                worker_count = INGEST_WORKER_COUNT
+                watch_enabled = bool(WATCH_DIR)
+                watch_subfolder = ""
+                debounce = WATCH_DEBOUNCE_SEC
+            await queue.start(worker_count=worker_count)
+            log.info("ingest queue started with %d workers", worker_count)
+            if watch_enabled and WATCH_DIR:
+                watch_path = Path(WATCH_DIR) / watch_subfolder if watch_subfolder else Path(WATCH_DIR)
                 if watch_path.is_dir():
-                    watcher = FolderWatcher(watch_path, queue,
-                                            debounce_sec=WATCH_DEBOUNCE_SEC)
+                    watcher = FolderWatcher(watch_path, queue, debounce_sec=debounce)
                     await watcher.start()
                 else:
-                    log.warning("VB_WATCH_DIR=%s is not a directory; watcher disabled",
-                                WATCH_DIR)
+                    log.warning("watch path %s is not a directory; watcher disabled", watch_path)
         try:
             yield {"queue": queue}
         finally:
